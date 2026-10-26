@@ -2,7 +2,7 @@
   "name": "daw-better",
   "version": "0.1.0",
   "private": true,
-  "description": "Self-hosted drum sequencer for experimenting with and teaching rhythm, with Claude connected over MCP",
+  "description": "Self-hosted drum sequencer and piano roll for experimenting with and teaching music, with Claude connected over MCP",
   "type": "module",
   "main": "server/index.js",
   "scripts": {

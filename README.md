@@ -1,8 +1,8 @@
 # daw-better
 
-A self-hosted drum sequencer for experimenting with rhythm and teaching it, with Claude connected over MCP. You and Claude edit the same pattern: anything Claude writes appears in the grid right away and is heard live while it plays, and Claude can read back what you changed by hand.
+A self-hosted drum sequencer and piano roll for experimenting with music and teaching it, with Claude connected over MCP. You and Claude edit the same pattern: anything Claude writes appears on screen right away and is heard live while it plays, and Claude can read back what you changed by hand.
 
-This is the first piece of a larger DAW project built around experimenting with music and learning it with AI.
+This is the start of a larger DAW project built around experimenting with music and learning it with AI.
 
 ## Quick start
 
@@ -51,7 +51,17 @@ Things to try:
 - **Tempo** and **Steps** in the display: drag up or down to change them, or click to type.
 - **Grid** sets the subdivision: 16ths, 8ths, triplets, and so on. The counting row above the steps follows it ("1 e + a").
 - **Swing** runs from 50% (straight) to 75%. 66% is a triplet shuffle.
-- The sequencer, Browser and Claude panels are windows. Drag them by the title bar, and double-click a title bar to collapse it. This browser remembers where you put them. On narrow screens they stack.
+- The sequencer, Piano Roll, Browser and Claude panels are windows. Drag them by the title bar, and double-click a title bar to collapse it. Resize the Piano Roll from its bottom-right corner. This browser remembers where you put them. On narrow screens they stack.
+
+## Piano roll
+
+Synth tracks play bass lines, melodies and chords. They share the drums' tempo, swing and step grid, so everything loops together.
+
+- Each synth track has a tab. **+ Synth** adds one with a sound: Bass, Keys, Lead, Pad or Pluck. The green light mutes the selected track, **S** solos it, and the knob sets its volume.
+- Left-click an empty spot to add a note, and drag a note to move it. Drag a note's right edge to change its length; new notes take the length you used last.
+- Right-click deletes a note, and right-drag deletes every note it passes over.
+- <kbd>Shift</kbd>-click a note to toggle an accent, <kbd>Alt</kbd>-click to toggle a soft note. Click a key on the keyboard to hear the pitch.
+- The other synth tracks show faintly behind the selected one, so you can line parts up. When Claude writes notes, the roll switches to that track and the new notes flash.
 
 The pattern is saved to `data/state.json` and restored when the server restarts. Set `DATA_FILE` to save somewhere else, for example to run separate instances side by side with different `PORT`s.
 
@@ -87,13 +97,16 @@ Track keys are instrument names, and the step strings use the same notation as C
 | `list_loops` / `load_loop` | Browse the loop library and load a loop into the sequencer |
 | `set_pattern`   | Write whole tracks from step strings (one undo step)               |
 | `set_steps`     | Change individual steps                                            |
+| `set_notes`     | Write notes and chords on a synth track (piano roll)               |
 | `set_transport` | Tempo, swing, length, subdivision, play and stop                   |
-| `set_track`     | Volume, mute, solo, name, sound                                    |
-| `add_track` / `remove_track` / `clear` | Arrange the kit                             |
+| `set_track`     | Volume, mute, solo, name, sound (drum or synth track)              |
+| `add_track` / `remove_track` / `clear` | Arrange drum and synth tracks               |
 | `show_note`     | Show an explanation beside the grid and highlight steps            |
 | `undo`          | Undo recent changes, by either of you                              |
 
 Step strings use one character per step: `X` accent, `x` hit, `o` ghost note, `.` rest. Spaces and `|` are ignored, so `"x... x... x... x..."` is four-on-the-floor. A short string repeats to fill the pattern: `"x.."` over 16 steps gives a 3-against-4 polyrhythm.
+
+Notes are given as a pitch name (`"C4"` is middle C, `"F#2"`, `"Bb3"`), a start step and a length in steps. Claude reads them back as `pitch@step+length`, so `A2@1+2` is an A2 on step 1 that lasts two steps.
 
 ## How it works
 
@@ -105,7 +118,9 @@ Step strings use one character per step: `X` accent, `x` hit, `o` ghost note, `.
 - [server/operations.js](server/operations.js) contains every edit. The browser and Claude go through the same functions, so they can't drift apart.
 - [server/library.js](server/library.js) reads the loop library from disk. It's served to the Browser at `/api/library` and to Claude through `list_loops`.
 - [server/mcp.js](server/mcp.js) defines the MCP tools and the instructions Claude receives when it connects. It runs in stateless Streamable HTTP mode.
-- [public/audio.js](public/audio.js) synthesizes every drum sound, so there are no samples to load. A look-ahead scheduler keeps timing tight, and it keeps playing in a background tab.
+- [shared/synths.js](shared/synths.js) lists the synth sounds and converts between note names and MIDI numbers, for both the server and the browser.
+- [public/pianoroll.js](public/pianoroll.js) is the Piano Roll window.
+- [public/audio.js](public/audio.js) synthesizes every drum and synth sound, so there are no samples to load. A look-ahead scheduler keeps timing tight, and it keeps playing in a background tab.
 - [public/app.js](public/app.js) renders whatever state the server sends. Claude's edits briefly flash in the grid.
 - [public/windows.js](public/windows.js) and [public/knob.js](public/knob.js) provide the draggable windows and rotary knobs.
 

@@ -301,6 +301,8 @@ input.lcd-value::-webkit-inner-spin-button, input.lcd-value::-webkit-outer-spin-
 
 .window-body { min-height: 0; overflow: auto; }
 .window.collapsed .window-body { display: none; }
+.window.resizable { resize: both; min-width: 420px; min-height: 180px; }
+.window.collapsed { height: auto !important; min-height: 0; resize: none; }
 
 /* --- sequencer -------------------------------------------------------------- */
 
@@ -441,6 +443,140 @@ input.lcd-value::-webkit-inner-spin-button, input.lcd-value::-webkit-outer-spin-
 }
 .hint { margin: 0; color: var(--muted); font-size: 12px; }
 .hint b { color: var(--text); font-weight: 600; }
+
+/* --- piano roll ------------------------------------------------------------- */
+
+.roll-window { width: 822px; }
+.roll-window:not(.collapsed) { height: 340px; }
+.roll-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.roll-icon {
+  flex: none;
+  width: 14px;
+  height: 10px;
+  background: linear-gradient(90deg, #eef0f3 0 45%, transparent 45%), repeating-linear-gradient(to bottom, #2b2f37 0 2px, #eef0f3 2px 3px);
+  border-radius: 1px;
+}
+
+.roll-toolbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--window-edge);
+  background: rgb(0 0 0 / 0.12);
+}
+.synth-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.synth-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 6px 0 9px;
+  border-radius: 5px;
+  border: 1px solid var(--window-edge);
+  background: linear-gradient(#353a44, #2b2f37);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.synth-tab.active { color: var(--text); background: linear-gradient(#454b57, #383d47); box-shadow: inset 0 -2px 0 var(--c); }
+.synth-tab.muted .tab-name { text-decoration: line-through; opacity: 0.6; }
+.tab-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.tab-rm { width: 14px; text-align: center; color: var(--muted); opacity: 0; }
+.synth-tab:hover .tab-rm { opacity: 1; }
+.tab-rm:hover { color: var(--bad); }
+.roll-controls { display: flex; align-items: center; gap: 7px; margin-left: auto; }
+
+.roll-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: #444a56 transparent; }
+.roll {
+  --keys-w: 58px;
+  --roll-white: #262a32;
+  --roll-black: #1e2128;
+  --roll-line: rgb(255 255 255 / 0.045);
+  --roll-beat: rgb(255 255 255 / 0.16);
+  --roll-octave: rgb(255 255 255 / 0.12);
+  display: grid;
+  grid-template-columns: var(--keys-w) max-content;
+  grid-template-rows: var(--ruler) max-content;
+  width: max-content;
+}
+.roll-corner { position: sticky; top: 0; left: 0; z-index: 4; background: var(--window); border-bottom: 1px solid var(--window-edge); }
+.roll-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  background: #22252c;
+  border-bottom: 1px solid var(--window-edge);
+}
+.roll-ruler span { flex: none; width: var(--col); padding-left: 4px; font-size: 10px; line-height: var(--ruler); color: var(--muted); }
+.roll-ruler span.beat { color: var(--text); font-weight: 700; box-shadow: inset 1px 0 0 rgb(255 255 255 / 0.18); }
+.roll-ruler span.now { background: rgb(255 59 48 / 0.3); }
+
+.roll-keys { position: sticky; left: 0; z-index: 2; box-shadow: 2px 0 4px rgb(0 0 0 / 0.35); }
+.key {
+  position: relative;
+  height: var(--row);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 5px;
+  background: linear-gradient(90deg, #c4c8d0, #eceef2);
+  border-bottom: 1px solid #a3a8b2;
+  color: #3a3f4a;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.key.black::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 1px;
+  bottom: 1px;
+  width: 62%;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(90deg, #121418, #2c3038);
+}
+.key.pressed { background: linear-gradient(90deg, #a9c8f0, #d5e6fb); }
+.key.black.pressed::before { background: linear-gradient(90deg, #2a4a72, #4a6d99); }
+
+.roll-lanes { position: relative; cursor: crosshair; touch-action: none; }
+.pr-note {
+  position: absolute;
+  height: calc(var(--row) - 1px);
+  padding-left: 3px;
+  overflow: hidden;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--c), black 50%);
+  background: color-mix(in oklab, var(--c) calc(40% + var(--v) * 60%), #20232a);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+  color: #15171b;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: calc(var(--row) - 3px);
+  white-space: nowrap;
+  cursor: move;
+}
+.pr-note.accent { box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.9); }
+.pr-note.ghost { opacity: 0.2; border: 0; box-shadow: none; pointer-events: none; color: transparent; }
+.pr-note.flash { animation: flash 0.9s ease-out; }
+.pr-handle { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; cursor: ew-resize; }
+.pr-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--col);
+  display: none;
+  background: rgb(255 255 255 / 0.05);
+  box-shadow: inset 2px 0 0 #ff3b30;
+  pointer-events: none;
+}
+.pr-playhead.on { display: block; }
+.roll-empty { position: sticky; top: 40%; padding: 20px; color: var(--muted); text-align: center; }
+.roll-hint { flex: none; margin: 0; padding: 6px 12px; border-top: 1px solid var(--window-edge); font-size: 11px; }
 
 /* --- browser window --------------------------------------------------------- */
 
@@ -610,8 +746,10 @@ input.lcd-value::-webkit-inner-spin-button, input.lcd-value::-webkit-outer-spin-
   body { height: auto; overflow: auto; }
   .workspace { overflow: visible; display: flex; flex-direction: column; gap: 12px; padding: 12px; }
   .window { position: static; max-width: none; }
-  .claude-window, .browser-window { width: auto; }
+  .claude-window, .browser-window, .roll-window { width: auto; }
   .browser-window:not(.collapsed) { height: auto; }
+  .roll-window:not(.collapsed) { height: 420px; }
+  .window.resizable { resize: none; min-width: 0; }
   .tree { max-height: 320px; }
   .titlebar { cursor: default; }
 }

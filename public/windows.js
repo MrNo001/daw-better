@@ -1,8 +1,9 @@
 // Floating windows inside the workspace, like the panels of a desktop DAW. Drag a window
-// by its title bar; double-click the title bar or press – to collapse it. Positions are
+// by its title bar; double-click the title bar or press – to collapse it. Windows with the
+// "resizable" class can be resized from their bottom-right corner. Positions and sizes are
 // remembered in this browser. On narrow screens the windows stack instead.
 
-const STORAGE_KEY = 'daw-better.windows.v2';
+const STORAGE_KEY = 'daw-better.windows.v3';
 const KEEP_VISIBLE = 120; // px of a window that must stay on screen
 const floating = matchMedia('(min-width: 900px)');
 
@@ -38,7 +39,12 @@ export function initWindows(workspace, defaults = {}) {
   }
 
   function remember(win) {
-    layout[win.dataset.window] = { x: win.offsetLeft, y: win.offsetTop, collapsed: win.classList.contains('collapsed') };
+    const entry = { x: win.offsetLeft, y: win.offsetTop, collapsed: win.classList.contains('collapsed') };
+    // The browser sets an inline size once the user drags the resize corner.
+    if (win.style.width) entry.width = win.offsetWidth;
+    if (win.style.height && !entry.collapsed) entry.height = win.offsetHeight;
+    else if (layout[win.dataset.window]?.height) entry.height = layout[win.dataset.window].height;
+    layout[win.dataset.window] = entry;
     saveLayout(layout);
   }
 
@@ -59,10 +65,12 @@ export function initWindows(workspace, defaults = {}) {
   function place() {
     for (const win of windows) {
       if (!floating.matches) {
-        win.style.left = win.style.top = win.style.maxHeight = '';
+        win.style.left = win.style.top = win.style.maxHeight = win.style.width = win.style.height = '';
         continue;
       }
       const saved = layout[win.dataset.window];
+      if (saved?.width) win.style.width = `${saved.width}px`;
+      if (saved?.height) win.style.height = `${saved.height}px`;
       const pos = saved ?? defaults[win.dataset.window]?.(workspace, win) ?? { x: 24, y: 24 };
       move(win, pos.x, pos.y);
     }
@@ -100,10 +108,21 @@ export function initWindows(workspace, defaults = {}) {
     };
     bar.addEventListener('dblclick', (e) => !e.target.closest('button') && toggle());
     win.querySelector('[data-collapse]')?.addEventListener('click', toggle);
+
+    if (win.classList.contains('resizable')) {
+      let timer;
+      new ResizeObserver(() => {
+        clearTimeout(timer);
+        timer = setTimeout(() => floating.matches && win.style.width && remember(win), 300);
+      }).observe(win);
+    }
   }
 
   place();
   focus(windows[0]);
+  // Windows the user hasn't moved go back to their default spot; call this once the
+  // content that the defaults depend on (like the sequencer's height) has rendered.
+  return { refresh: place };
   floating.addEventListener('change', place);
   addEventListener('resize', () => {
     if (floating.matches) for (const win of windows) move(win, win.offsetLeft, win.offsetTop);

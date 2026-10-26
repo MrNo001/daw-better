@@ -79,6 +79,9 @@ const UI_ACTIONS = {
   addTrack: ops.addTrack,
   removeTrack: ops.removeTrack,
   clearTracks: ops.clearTracks,
+  addNote: ops.addNote,
+  updateNote: ops.updateNote,
+  deleteNotes: ops.deleteNotes,
 };
 
 function handleAction({ name, args = {}, stroke }) {

@@ -4,19 +4,21 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
 import { INSTRUMENTS } from '../shared/instruments.js';
+import { SYNTHS } from '../shared/synths.js';
 import { formatGrid } from './notation.js';
 import * as ops from './operations.js';
 
-const INSTRUCTIONS = `daw-better is a drum sequencer open in the user's browser. Every change you make with these tools appears in the grid immediately and is heard live if the pattern is playing. People use it to experiment with rhythm and to learn it.
+const INSTRUCTIONS = `daw-better is a drum sequencer with a piano roll, open in the user's browser. Every change you make with these tools appears on screen immediately and is heard live if the pattern is playing. People use it to experiment with music and to learn it.
 
-- Call get_state before editing if you haven't looked recently: the user edits the grid by hand too, and their recent edits are listed there.
+- Call get_state before editing if you haven't looked recently: the user edits by hand too, and their recent edits are listed there.
 - Steps are numbered from 1. With 4 steps per beat, a 16-step bar has beats on steps 1, 5, 9 and 13.
-- set_pattern writes whole tracks in one undoable step; set_steps is for small tweaks.
+- Drum tracks: set_pattern writes whole tracks in one undoable step; set_steps is for small tweaks.
+- Synth tracks play melodies, bass lines and chords from the piano roll. Write them with set_notes; notes sit on the same step grid as the drums, and several notes with the same start make a chord. Pitches are note names, with C4 as middle C.
 - The loop library (list_loops, load_loop) holds ready-made grooves in genre folders. The user browses the same library in the app's Browser window, and a library loop makes a good starting point to study or vary.
 - When teaching, build a groove up in layers and start playback so the user hears each one. Use show_note to say what to listen for, highlighting the steps you mean, and keep notes short since the grid is the main thing. Invite the user to try a variation by hand, then read it back with get_state and respond to what they did.
 - Everything can be undone, so experiment freely.`;
 
-const trackRef = z.string().describe('Track id, track name, or instrument (e.g. "kick", "hh", "Open Hat")');
+const trackRef = z.string().describe('Track id, track name, or instrument (e.g. "kick", "hh", "Open Hat", "bass")');
 const stepNumber = z.number().int().min(1).describe('Step number, starting at 1');
 
 function ago(timestamp) {
@@ -58,8 +60,8 @@ export function createMcpServer({ store, library, audience, appUrl }) {
     {
       title: 'Read the sequencer',
       description:
-        "Read what's in the sequencer right now: transport, every track's steps as a text grid " +
-        '(X accent, x hit, o ghost note, . rest), the note on screen, and what the user changed recently.',
+        "Read what's in the sequencer right now: transport, every drum track's steps as a text grid " +
+        '(X accent, x hit, o ghost note, . rest), every synth track\'s notes, the note on screen, and what the user changed recently.',
       annotations: { readOnlyHint: true },
     },
     async () => {
@@ -74,7 +76,7 @@ export function createMcpServer({ store, library, audience, appUrl }) {
           loop ? `Started from library loop ${loop.id} ("${loop.name}"), possibly edited since.` : 'Not based on a library loop.',
           note ? `On-screen note: "${note.title || note.body.slice(0, 60)}"` : 'No note on screen.',
           `Recent changes, newest first:\n${recent || '(none yet)'}`,
-          `Instruments: ${INSTRUMENTS.map((i) => i.id).join(', ')}`,
+          `Drum instruments: ${INSTRUMENTS.map((i) => i.id).join(', ')}. Synth sounds: ${SYNTHS.map((s) => s.id).join(', ')}.`,
         ].join('\n\n') + listening(),
       );
     },
@@ -157,6 +159,34 @@ export function createMcpServer({ store, library, audience, appUrl }) {
   );
 
   tool(
+    'set_notes',
+    {
+      title: 'Write notes in the piano roll',
+      description:
+        'Write notes on a synth track (bass line, melody, chords). Notes use the same step grid as the drums: ' +
+        'with 4 steps per beat, a quarter note has length 4 and a whole bar of 16 steps is 4 beats. ' +
+        'Notes with the same start play together as a chord. Pitches run from C1 to C7. ' +
+        'Naming a synth sound that has no track yet adds one. The whole call is one undo step.',
+      inputSchema: {
+        track: z.string().describe(`Synth track id or name, or a synth sound: ${SYNTHS.map((s) => s.id).join(', ')}`),
+        notes: z
+          .array(
+            z.object({
+              pitch: z.union([z.string(), z.number().int()]).describe('Note name like "C4" (middle C), "F#2" or "Bb3", or a MIDI number'),
+              start: stepNumber,
+              length: z.number().int().min(1).optional().describe('Length in steps. Default 1.'),
+              velocity: z.number().min(0).max(1).optional().describe('Default 0.8; 1 is an accent'),
+            }),
+          )
+          .describe('An empty list with mode "replace" clears the track'),
+        mode: z.enum(['replace', 'add']).optional().describe('"replace" (default) rewrites the track; "add" keeps its notes'),
+      },
+    },
+    ({ track, notes, mode = 'replace' }) =>
+      edit((s) => ops.setNotes(s, { track, replace: mode === 'replace', notes: notes.map((n) => ({ ...n, start: n.start - 1 })) })),
+  );
+
+  tool(
     'set_transport',
     {
       title: 'Tempo, length and playback',
@@ -188,14 +218,19 @@ export function createMcpServer({ store, library, audience, appUrl }) {
     'set_track',
     {
       title: 'Track settings',
-      description: "Change a track's volume, mute, solo, display name or instrument sound.",
+      description: "Change a drum or synth track's volume, mute, solo, display name or sound.",
       inputSchema: {
         track: trackRef,
         volume: z.number().min(0).max(1).optional(),
         mute: z.boolean().optional(),
         solo: z.boolean().optional(),
         name: z.string().optional(),
-        instrument: z.string().optional().describe(`One of: ${INSTRUMENTS.map((i) => i.id).join(', ')}`),
+        instrument: z
+          .string()
+          .optional()
+          .describe(
+            `Drum tracks: ${INSTRUMENTS.map((i) => i.id).join(', ')}. Synth tracks: ${SYNTHS.map((s) => s.id).join(', ')}`,
+          ),
       },
     },
     (args) => edit((s) => ops.setTrack(s, args)),
@@ -205,10 +240,12 @@ export function createMcpServer({ store, library, audience, appUrl }) {
     'add_track',
     {
       title: 'Add a track',
-      description: 'Add a new track for an instrument (at most 16 tracks).',
+      description:
+        'Add a drum track (at most 16) or, with a synth sound, a piano-roll synth track (at most 8). ' +
+        'Use this for a second track with the same sound; set_pattern and set_notes add the first one automatically.',
       inputSchema: {
-        instrument: z.enum(INSTRUMENTS.map((i) => i.id)),
-        name: z.string().optional().describe('Display name, e.g. "Ghost snare". Defaults to the instrument name.'),
+        instrument: z.enum([...INSTRUMENTS.map((i) => i.id), ...SYNTHS.map((s) => s.id)]),
+        name: z.string().optional().describe('Display name, e.g. "Ghost snare" or "Chords". Defaults to the sound name.'),
       },
     },
     (args) => edit((s) => ops.addTrack(s, args)),
@@ -218,7 +255,7 @@ export function createMcpServer({ store, library, audience, appUrl }) {
     'remove_track',
     {
       title: 'Remove a track',
-      description: 'Delete a track and its steps.',
+      description: 'Delete a drum or synth track with its steps or notes.',
       inputSchema: { track: trackRef },
       annotations: { destructiveHint: true },
     },
@@ -228,8 +265,9 @@ export function createMcpServer({ store, library, audience, appUrl }) {
   tool(
     'clear',
     {
-      title: 'Clear steps',
-      description: 'Silence every step on the listed tracks, or on all tracks if none are given. The tracks stay.',
+      title: 'Clear tracks',
+      description:
+        'Silence every step and remove every note on the listed tracks, or on all drum and synth tracks if none are given. The tracks stay.',
       inputSchema: { tracks: z.array(trackRef).optional() },
       annotations: { destructiveHint: true },
     },

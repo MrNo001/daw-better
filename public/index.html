@@ -45,7 +45,7 @@
       <div class="actions">
         <button id="undo" class="tool-btn" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
         <button id="redo" class="tool-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
-        <button id="clear" class="tool-btn text" title="Clear every step">Clear</button>
+        <button id="clear" class="tool-btn text" title="Clear every drum step and every note">Clear</button>
       </div>
 
       <div class="toolbar-right">
@@ -78,6 +78,42 @@
               <kbd>Alt</kbd> ghost note · press a name to hear it
             </p>
           </footer>
+        </div>
+      </section>
+
+      <section class="window roll-window resizable" data-window="roll" aria-labelledby="roll-title">
+        <header class="titlebar">
+          <span class="roll-icon" aria-hidden="true"></span>
+          <h2 id="roll-title" class="title">Piano Roll</h2>
+          <span id="roll-meta" class="title-meta"></span>
+          <button class="win-btn" data-collapse title="Collapse (or double-click the title bar)">–</button>
+        </header>
+        <div class="window-body roll-body">
+          <div class="roll-toolbar">
+            <div id="synth-tabs" class="synth-tabs" role="tablist" aria-label="Synth tracks"></div>
+            <select id="add-synth" aria-label="Add a synth track">
+              <option value="">+ Synth</option>
+            </select>
+            <div class="roll-controls">
+              <button id="synth-mute" class="mute-led" title="Mute"></button>
+              <button id="synth-solo" class="solo-btn" title="Solo">S</button>
+              <span id="synth-volume"></span>
+              <select id="synth-preset" aria-label="Sound"></select>
+              <button id="synth-clear" class="tool-btn text" title="Remove every note on this track">Clear</button>
+            </div>
+          </div>
+          <div id="roll-scroll" class="roll-scroll">
+            <div id="roll" class="roll">
+              <div class="roll-corner"></div>
+              <div id="roll-ruler" class="roll-ruler"></div>
+              <div id="roll-keys" class="roll-keys"></div>
+              <div id="roll-lanes" class="roll-lanes"></div>
+            </div>
+          </div>
+          <p class="hint roll-hint">
+            <b>Left</b>-click to add a note, drag to move it, drag its end to resize · <b>right</b>-click or drag to
+            delete · <kbd>Shift</kbd> accent · <kbd>Alt</kbd> soft · click a key to hear it
+          </p>
         </div>
       </section>
 

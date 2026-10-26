@@ -6,6 +6,7 @@ import { INSTRUMENTS } from '/shared/instruments.js';
 import { DrumEngine } from './audio.js';
 import { createKnob } from './knob.js';
 import { initWindows } from './windows.js';
+import { createPianoRoll } from './pianoroll.js';
 
 const VELOCITY = { normal: 0.8, accent: 1, ghost: 0.45 };
 const SUBDIVISIONS = { 1: 'quarters', 2: '8ths', 3: 'triplets', 4: '16ths', 5: 'quintuplets', 6: '16th triplets', 7: 'septuplets', 8: '32nds' };
@@ -62,15 +63,18 @@ function setConnected(on) {
 function applySync(msg) {
   const previous = state;
   state = msg.state;
+  state.synths ??= []; // a server started before synth tracks existed sends none
   activity = msg.activity;
   meta = msg.meta;
   renderGrid(previous, msg.source);
+  pianoRoll.render(previous, msg.source);
   renderLoopIndicator(previous);
   renderTransport();
   renderNote(previous);
   renderActivity();
   renderClaudeStatus();
   syncPlayback();
+  if (!previous) windows.refresh(); // the sequencer now has its real height
 }
 
 // --- audio -------------------------------------------------------------------
@@ -105,12 +109,16 @@ function renderAudioChip() {
 
 const isAudible = (track, anySolo) => !track.mute && (!anySolo || track.solo);
 
+// Solo is global: soloing a synth track silences unsoloed drum tracks and vice versa.
+const anySoloed = () => [...state.tracks, ...state.synths].some((t) => t.solo);
+
 engine.onStep = (step) => {
+  pianoRoll.setPlayhead(step);
   for (const node of grid.querySelectorAll('.now')) node.classList.remove('now');
   $('position').value = step < 0 ? '–.–' : `${Math.floor(step / state.stepsPerBeat) + 1}.${(step % state.stepsPerBeat) + 1}`;
   if (step < 0) return;
   for (const node of grid.querySelectorAll(`[data-step="${step}"]`)) node.classList.add('now');
-  const anySolo = state.tracks.some((t) => t.solo);
+  const anySolo = anySoloed();
   for (const track of state.tracks) {
     if (track.steps[step] > 0 && isAudible(track, anySolo)) flash(rows.get(track.id)?.led, 'hit');
   }
@@ -217,7 +225,7 @@ function renderGrid(previous, source) {
     gridSignature = signature;
   }
 
-  const anySolo = state.tracks.some((t) => t.solo);
+  const anySolo = anySoloed();
   const highlighted = new Set((state.note?.highlights ?? []).flatMap((h) => h.steps.map((s) => `${h.track}:${s}`)));
 
   for (const track of state.tracks) {
@@ -708,9 +716,14 @@ $('copy-cmd').addEventListener('click', async () => {
   }
 });
 
-initWindows($('workspace'), {
+const windows = initWindows($('workspace'), {
   browser: () => ({ x: 16, y: 16 }),
   sequencer: () => ({ x: 260, y: 16 }),
+  // Just below the sequencer; on short screens it gets shorter rather than covering it.
+  roll: (workspace) => {
+    const sequencer = $('win-sequencer');
+    return { x: 260, y: Math.min(sequencer.offsetTop + sequencer.offsetHeight + 12, workspace.clientHeight - 200) };
+  },
   claude: (workspace, win) => ({ x: workspace.clientWidth - win.offsetWidth - 16, y: 16 }),
 });
 
@@ -718,6 +731,8 @@ setInterval(() => {
   renderActivity();
   renderClaudeStatus();
 }, 15_000);
+
+const pianoRoll = createPianoRoll({ engine, act, getState: () => state });
 
 renderAudioChip();
 connect();

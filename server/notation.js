@@ -1,3 +1,5 @@
+import { noteName } from '../shared/synths.js';
+
 // Text notation used by the MCP tools: one character per step.
 //   X = accent (1.0)   x = hit (0.8)   o = ghost note (0.45)   . or - = rest   1-9 = velocity n/9
 // Spaces and | are ignored, so "x... x... | x... x..." is fine.
@@ -42,8 +44,17 @@ function formatSteps(steps, stepsPerBeat) {
   return steps.map((v, i) => (i > 0 && i % stepsPerBeat === 0 ? ' ' : '') + stepChar(v)).join('');
 }
 
+// Synth notes as "pitch@step+length", e.g. "A2@1+2" is an A2 on step 1 lasting two steps.
+// Velocity is only shown when it isn't the default 0.8.
+function formatNotes(notes) {
+  if (notes.length === 0) return '(no notes)';
+  return notes
+    .map((n) => `${noteName(n.pitch)}@${n.start + 1}+${n.length}${n.velocity === 0.8 ? '' : `(v${+n.velocity.toFixed(2)})`}`)
+    .join(' ');
+}
+
 export function formatGrid(state) {
-  const { bpm, swing, length, stepsPerBeat: spb, playing, tracks } = state;
+  const { bpm, swing, length, stepsPerBeat: spb, playing, tracks, synths } = state;
   const beats = +(length / spb).toFixed(2);
   const lines = [
     `${playing ? 'PLAYING' : 'STOPPED'} · ${bpm} BPM · swing ${swing}% · ` +
@@ -51,22 +62,28 @@ export function formatGrid(state) {
     '',
   ];
 
-  const labelWidth = Math.max(10, ...tracks.map((t) => t.id.length)) + 1;
+  const labelWidth = Math.max(10, ...tracks.map((t) => t.id.length), ...synths.map((s) => s.id.length)) + 1;
   if (spb > 1) {
     let ruler = '';
     for (let b = 0; b * spb < length; b++) ruler += String(b + 1).padEnd(spb + 1);
     lines.push(`${'beat'.padEnd(labelWidth)}  ${ruler.trimEnd()}`);
   }
 
-  const anySolo = tracks.some((t) => t.solo);
-  for (const t of tracks) {
+  const anySolo = [...tracks, ...synths].some((t) => t.solo);
+  const flags = (t, sound) => {
     const info = [`vol ${Math.round(t.volume * 100)}%`];
-    if (t.id !== t.instrument) info.push(`sound: ${t.instrument}`);
+    if (t.id !== sound) info.push(`sound: ${sound}`);
     if (t.mute) info.push('MUTED');
     if (t.solo) info.push('SOLO');
     else if (anySolo) info.push('silent (another track is soloed)');
-    lines.push(`${t.id.padEnd(labelWidth)}| ${formatSteps(t.steps, spb)} |  ${info.join(', ')}`);
+    return info.join(', ');
+  };
+  for (const t of tracks) lines.push(`${t.id.padEnd(labelWidth)}| ${formatSteps(t.steps, spb)} |  ${flags(t, t.instrument)}`);
+  if (tracks.length === 0) lines.push('(no drum tracks)');
+
+  if (synths.length) {
+    lines.push('', 'Synth tracks (piano roll), notes as pitch@step+length:');
+    for (const s of synths) lines.push(`${s.id.padEnd(labelWidth)}| ${formatNotes(s.notes)}  [${flags(s, s.preset)}]`);
   }
-  if (tracks.length === 0) lines.push('(no tracks)');
   return lines.join('\n');
 }

@@ -86,10 +86,17 @@ export class DrumEngine {
       // Swing delays every second step: at 66% the off-beat lands on the triplet.
       const offset = swingable && i % 2 === 1 ? (s.swing / 100 - 0.5) * 2 * stepDur : 0;
       const time = this.nextTime + offset;
-      const anySolo = s.tracks.some((t) => t.solo);
+      const anySolo = [...s.tracks, ...s.synths].some((t) => t.solo);
+      const audible = (t) => !t.mute && (!anySolo || t.solo);
       for (const t of s.tracks) {
         const v = t.steps[i];
-        if (v > 0 && !t.mute && (!anySolo || t.solo)) this.trigger(t.instrument, time, v * t.volume);
+        if (v > 0 && audible(t)) this.trigger(t.instrument, time, v * t.volume);
+      }
+      for (const synth of s.synths) {
+        if (!audible(synth)) continue;
+        for (const n of synth.notes) {
+          if (n.start === i) this.playNote(synth.preset, n.pitch, time, n.length * stepDur, n.velocity * synth.volume);
+        }
       }
       this.queue.push({ step: i, time });
       this.nextTime += stepDur;
@@ -109,10 +116,44 @@ export class DrumEngine {
     if (this.running) this.raf = requestAnimationFrame(this.draw);
   };
 
-  trigger(instrument, time = this.ctx.currentTime, velocity = 0.8) {
+  trigger(instrument, time = this.ctx?.currentTime, velocity = 0.8) {
     if (!this.ctx || velocity <= 0) return;
     const voice = VOICES[instrument];
     if (voice) voice(this, Math.max(time, this.ctx.currentTime), velocity);
+  }
+
+  // One synth note: oscillators -> low-pass filter with its own envelope -> amp envelope.
+  playNote(preset, midi, time = this.ctx?.currentTime, duration = 0.3, velocity = 0.8) {
+    const p = SYNTH_PRESETS[preset];
+    if (!this.ctx || !p || velocity <= 0) return;
+    const ctx = this.ctx;
+    const t = Math.max(time, ctx.currentTime);
+    const freq = 440 * 2 ** ((midi - 69) / 12);
+    const { attack, decay, sustain, release } = p.amp;
+    const peak = velocity * p.gain;
+    const end = t + Math.max(duration - 0.01, attack);
+
+    const amp = ctx.createGain();
+    amp.gain.setValueAtTime(0, t);
+    amp.gain.linearRampToValueAtTime(peak, t + attack);
+    amp.gain.setTargetAtTime(peak * sustain, t + attack, decay / 3);
+    amp.gain.setTargetAtTime(0, end, release / 3);
+    amp.connect(this.master);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.Q.value = p.filter.q;
+    filter.frequency.setValueAtTime(p.filter.cutoff + p.filter.env, t);
+    filter.frequency.setTargetAtTime(p.filter.cutoff, t, p.filter.decay / 3);
+    filter.connect(amp);
+
+    for (const [type, semitones, level, detune] of p.oscillators) {
+      const gain = ctx.createGain();
+      gain.gain.value = level;
+      gain.connect(filter);
+      const osc = this.osc(type, freq * 2 ** (semitones / 12), t, end - t + release * 2, gain);
+      osc.detune.value = detune;
+    }
   }
 
   // --- building blocks -------------------------------------------------------
@@ -173,6 +214,41 @@ export class DrumEngine {
     this.openHat = null;
   }
 }
+
+// Synth sounds for the piano roll (ids match shared/synths.js). Each oscillator is
+// [waveform, semitone offset, level, detune in cents]; envelope times are in seconds.
+const SYNTH_PRESETS = {
+  bass: {
+    oscillators: [['sawtooth', 0, 0.7, 0], ['sine', -12, 0.8, 0]],
+    filter: { cutoff: 420, env: 1400, q: 3, decay: 0.22 },
+    amp: { attack: 0.004, decay: 0.25, sustain: 0.7, release: 0.06 },
+    gain: 0.55,
+  },
+  keys: {
+    oscillators: [['triangle', 0, 1, 0], ['sine', 12, 0.25, 0], ['sine', 0, 0.5, 4]],
+    filter: { cutoff: 2600, env: 1800, q: 0.7, decay: 0.4 },
+    amp: { attack: 0.005, decay: 0.9, sustain: 0.35, release: 0.35 },
+    gain: 0.4,
+  },
+  lead: {
+    oscillators: [['sawtooth', 0, 0.55, -7], ['sawtooth', 0, 0.55, 7], ['square', -12, 0.25, 0]],
+    filter: { cutoff: 1800, env: 2200, q: 2, decay: 0.3 },
+    amp: { attack: 0.01, decay: 0.15, sustain: 0.8, release: 0.12 },
+    gain: 0.28,
+  },
+  pad: {
+    oscillators: [['sawtooth', 0, 0.45, -12], ['sawtooth', 0, 0.45, 12], ['triangle', 12, 0.3, 0]],
+    filter: { cutoff: 1100, env: 500, q: 0.8, decay: 1.2 },
+    amp: { attack: 0.35, decay: 0.6, sustain: 0.85, release: 0.9 },
+    gain: 0.26,
+  },
+  pluck: {
+    oscillators: [['sawtooth', 0, 0.8, 0], ['square', 12, 0.2, 3]],
+    filter: { cutoff: 280, env: 4200, q: 4, decay: 0.12 },
+    amp: { attack: 0.002, decay: 0.35, sustain: 0, release: 0.12 },
+    gain: 0.45,
+  },
+};
 
 function tom(freq) {
   return (e, t, v) => {
