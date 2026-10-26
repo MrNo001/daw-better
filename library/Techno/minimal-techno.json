@@ -1,0 +1,17 @@
+{
+  "name": "Minimal Techno",
+  "description": "Minimal techno: very little happens, so every small rim shot and tom stands out. Try muting parts one at a time.",
+  "bpm": 126,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... x... x... x...",
+    "closed_hat": "..x. ..x. ..x. ..x.",
+    "rim": "...x ..x. .... .x..",
+    "low_tom": {
+      "steps": ".... ...x .... ..x.",
+      "volume": 0.6
+    }
+  }
+}

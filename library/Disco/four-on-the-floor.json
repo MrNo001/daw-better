@@ -1,0 +1,14 @@
+{
+  "name": "Four on the Floor",
+  "description": "The heartbeat of 1970s disco: kick on every beat, snare on 2 and 4, and an open hi-hat on every off-beat “and”.",
+  "bpm": 120,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... x... x... x...",
+    "snare": ".... x... .... x...",
+    "closed_hat": "xx.x xx.x xx.x xx.x",
+    "open_hat": "..x. ..x. ..x. ..x."
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Philly Soul",
+  "description": "Philadelphia soul, the sound that became disco: a gentle swing, ghosted snare notes, and a cowbell riding the off-beats.",
+  "bpm": 112,
+  "swing": 56,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... x... x... x...",
+    "snare": ".... x..o .... x.o.",
+    "closed_hat": "x.x. x.x. x.x. x.x.",
+    "cowbell": {
+      "steps": "..x. ..x. ..x. ..x.",
+      "volume": 0.55
+    }
+  }
+}

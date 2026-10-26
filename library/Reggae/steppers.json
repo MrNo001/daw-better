@@ -1,0 +1,13 @@
+{
+  "name": "Steppers",
+  "description": "Steppers: the kick hits every beat and drives the groove forward, while the cross-stick stays on beat 3.",
+  "bpm": 80,
+  "swing": 60,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... x... x... x...",
+    "rim": ".... .... x... ....",
+    "closed_hat": "..x. ..x. ..x. ..x."
+  }
+}

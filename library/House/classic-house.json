@@ -1,0 +1,14 @@
+{
+  "name": "Classic House",
+  "description": "Chicago house: four-on-the-floor kick, claps on 2 and 4, and an open hi-hat on every off-beat, with quiet 16ths in between.",
+  "bpm": 124,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... x... x... x...",
+    "clap": ".... x... .... x...",
+    "closed_hat": "xo.o xo.o xo.o xo.o",
+    "open_hat": "..x. ..x. ..x. ..x."
+  }
+}

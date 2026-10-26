@@ -57,10 +57,11 @@
     </header>
 
     <main id="workspace" class="workspace">
-      <section class="window" data-window="sequencer" aria-labelledby="seq-title">
+      <section id="win-sequencer" class="window" data-window="sequencer" aria-labelledby="seq-title">
         <header class="titlebar">
           <span class="title-icon" aria-hidden="true"></span>
           <h1 id="seq-title" class="title">Drum Sequencer</h1>
+          <span id="seq-loop" class="title-loop" hidden></span>
           <span id="seq-meta" class="title-meta"></span>
           <button class="win-btn" data-collapse title="Collapse (or double-click the title bar)">–</button>
         </header>
@@ -77,6 +78,26 @@
               <kbd>Alt</kbd> ghost note · press a name to hear it
             </p>
           </footer>
+        </div>
+      </section>
+
+      <section class="window browser-window" data-window="browser" aria-labelledby="browser-title">
+        <header class="titlebar">
+          <span class="folder-icon" aria-hidden="true"></span>
+          <h2 id="browser-title" class="title">Browser</h2>
+          <button id="library-refresh" class="win-btn" title="Reload the library from disk" aria-label="Reload library">↻</button>
+          <button class="win-btn" data-collapse title="Collapse (or double-click the title bar)">–</button>
+        </header>
+        <div class="window-body browser-body">
+          <ul id="library" class="tree" role="tree" aria-label="Loop library"></ul>
+          <section id="loop-details" class="loop-details" hidden>
+            <h3 id="loop-name"></h3>
+            <p id="loop-meta" class="loop-meta"></p>
+            <div id="loop-preview" class="loop-preview" aria-hidden="true"></div>
+            <p id="loop-description" class="loop-description"></p>
+            <button id="loop-load" class="tool-btn text load-btn">Load into sequencer</button>
+            <p class="hint">Or double-click a loop, or drag it onto the sequencer.</p>
+          </section>
         </div>
       </section>
 

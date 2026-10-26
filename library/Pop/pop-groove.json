@@ -1,0 +1,17 @@
+{
+  "name": "Pop Groove",
+  "description": "A syncopated kick against a clap-and-snare backbeat: the bounce behind countless pop hits.",
+  "bpm": 104,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x..x ..x. x... ....",
+    "snare": {
+      "steps": ".... x... .... x...",
+      "volume": 0.6
+    },
+    "clap": ".... x... .... x...",
+    "closed_hat": "x.x. x.x. x.x. x.xx"
+  }
+}

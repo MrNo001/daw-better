@@ -1,0 +1,13 @@
+{
+  "name": "Basic Rock Beat",
+  "description": "The foundation of rock: kick on 1 and 3, snare on the backbeat (2 and 4), and steady 8th-note hi-hats.",
+  "bpm": 100,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... .... x... ....",
+    "snare": ".... x... .... x...",
+    "closed_hat": "x.x. x.x. x.x. x.x."
+  }
+}

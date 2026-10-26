@@ -1,0 +1,20 @@
+{
+  "name": "Deep House",
+  "description": "Deep house: a softer, swung groove where rim shots and off-beat hats sit around a steady kick.",
+  "bpm": 120,
+  "swing": 58,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... x... x... x...",
+    "clap": {
+      "steps": ".... x... .... x...",
+      "volume": 0.6
+    },
+    "rim": {
+      "steps": "..x. ...x .x.. ..x.",
+      "volume": 0.6
+    },
+    "closed_hat": "..x. ..x. ..x. ..x."
+  }
+}

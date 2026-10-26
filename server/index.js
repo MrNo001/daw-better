@@ -9,6 +9,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { Store } from './store.js';
+import { Library } from './library.js';
 import { createMcpServer } from './mcp.js';
 import * as ops from './operations.js';
 
@@ -23,11 +24,13 @@ const appUrl = `http://localhost:${PORT}`;
 
 // Where the pattern is saved. Set DATA_FILE to run several independent instances.
 const store = new Store(process.env.DATA_FILE ?? path.join(root, 'data', 'state.json'));
+const library = new Library(process.env.LIBRARY_DIR ?? path.join(root, 'library'));
 
 // Host-header validation (DNS rebinding protection) and JSON body parsing.
 const app = createMcpExpressApp({ host: HOST, allowedHosts: ALLOWED_HOSTS });
 app.use(express.static(path.join(root, 'public')));
 app.use('/shared', express.static(path.join(root, 'shared')));
+app.get('/api/library', (req, res) => res.json(library.list()));
 
 const server = http.createServer(app);
 
@@ -83,6 +86,7 @@ function handleAction({ name, args = {}, stroke }) {
   if (name === 'redo') return store.redo('user');
   if (name === 'setPlaying') return store.change('user', (s) => ops.setPlaying(s, args), { undoable: false });
   if (name === 'setNote') return store.change('user', (s) => ops.setNote(s, args), { undoable: false });
+  if (name === 'loadLoop') return store.change('user', (s) => ops.loadLoop(s, library.get(args.id)));
   if (!Object.hasOwn(UI_ACTIONS, name)) throw new Error(`Unknown action "${name}".`);
   return store.change('user', (s) => UI_ACTIONS[name](s, args), { coalesce: stroke });
 }
@@ -113,7 +117,7 @@ wss.on('connection', (ws) => {
 // MCP over Streamable HTTP, stateless: a new server and transport per request.
 app.post('/mcp', async (req, res) => {
   store.markClaudeSeen();
-  const mcp = createMcpServer({ store, audience, appUrl });
+  const mcp = createMcpServer({ store, library, audience, appUrl });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on('close', () => {
     transport.close();

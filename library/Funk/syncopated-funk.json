@@ -1,0 +1,14 @@
+{
+  "name": "Syncopated Funk",
+  "description": "A lightly swung 16th-note groove with an open hi-hat on the “and” of 2 and 4, a staple of 1970s funk.",
+  "bpm": 94,
+  "swing": 57,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x..x ..x. .x.. ..x.",
+    "snare": ".... x... .... x...",
+    "closed_hat": "x.x. x... x.x. x...",
+    "open_hat": ".... ..x. .... ..x."
+  }
+}

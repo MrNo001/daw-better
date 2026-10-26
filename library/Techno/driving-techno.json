@@ -1,0 +1,20 @@
+{
+  "name": "Driving Techno",
+  "description": "A relentless four-on-the-floor kick with off-beat open hats and quiet 16ths, built for long, hypnotic sets.",
+  "bpm": 130,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... x... x... x...",
+    "clap": {
+      "steps": ".... x... .... x...",
+      "volume": 0.7
+    },
+    "closed_hat": "oo.o oo.o oo.o oo.o",
+    "open_hat": {
+      "steps": "..x. ..x. ..x. ..x.",
+      "volume": 0.6
+    }
+  }
+}

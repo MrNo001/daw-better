@@ -1,0 +1,17 @@
+{
+  "name": "Driving Rock",
+  "description": "An extra kick on the “and” of 3 pushes the groove forward, accented hats drive the beat, and a crash marks the top of the bar.",
+  "bpm": 132,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... .... x.x. ....",
+    "snare": ".... x... .... x...",
+    "closed_hat": "X.x. X.x. X.x. X.x.",
+    "crash": {
+      "steps": "x... .... .... ....",
+      "volume": 0.7
+    }
+  }
+}

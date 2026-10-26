@@ -12,6 +12,7 @@ const INSTRUCTIONS = `Beat Lab is a drum sequencer open in the user's browser. E
 - Call get_state before editing if you haven't looked recently: the user edits the grid by hand too, and their recent edits are listed there.
 - Steps are numbered from 1. With 4 steps per beat, a 16-step bar has beats on steps 1, 5, 9 and 13.
 - set_pattern writes whole tracks in one undoable step; set_steps is for small tweaks.
+- The loop library (list_loops, load_loop) holds ready-made grooves in genre folders. The user browses the same library in the app's Browser window, and a library loop makes a good starting point to study or vary.
 - When teaching, build a groove up in layers and start playback so the user hears each one. Use show_note to say what to listen for, highlighting the steps you mean, and keep notes short since the grid is the main thing. Invite the user to try a variation by hand, then read it back with get_state and respond to what they did.
 - Everything can be undone, so experiment freely.`;
 
@@ -24,7 +25,7 @@ function ago(timestamp) {
   return `${Math.round(s / 60)} min ago`;
 }
 
-export function createMcpServer({ store, audience, appUrl }) {
+export function createMcpServer({ store, library, audience, appUrl }) {
   const server = new McpServer({ name: 'beat-lab', version: '0.1.0' }, { instructions: INSTRUCTIONS });
 
   const listening = () => {
@@ -62,7 +63,7 @@ export function createMcpServer({ store, audience, appUrl }) {
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const { note } = store.state;
+      const { note, loop } = store.state;
       const recent = store.activity
         .slice(0, 10)
         .map((a) => `- ${ago(a.at)}, ${a.source === 'claude' ? 'you' : 'the user'}: ${a.text}`)
@@ -70,12 +71,48 @@ export function createMcpServer({ store, audience, appUrl }) {
       return text(
         [
           formatGrid(store.state),
+          loop ? `Started from library loop ${loop.id} ("${loop.name}"), possibly edited since.` : 'Not based on a library loop.',
           note ? `On-screen note: "${note.title || note.body.slice(0, 60)}"` : 'No note on screen.',
           `Recent changes, newest first:\n${recent || '(none yet)'}`,
           `Instruments: ${INSTRUMENTS.map((i) => i.id).join(', ')}`,
         ].join('\n\n') + listening(),
       );
     },
+  );
+
+  server.registerTool(
+    'list_loops',
+    {
+      title: 'Browse the loop library',
+      description: 'List the ready-made loops in the library, grouped in genre folders, with tempo and a short description. Load one with load_loop.',
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const folders = library.list();
+      if (folders.length === 0) return text('The library is empty.');
+      return text(
+        folders
+          .map(
+            (f) =>
+              `${f.name}\n` +
+              f.loops
+                .map((l) => `- ${l.id}: "${l.name}", ${l.bpm} BPM${l.swing > 50 ? `, swing ${l.swing}%` : ''}. ${l.description}`)
+                .join('\n'),
+          )
+          .join('\n\n'),
+      );
+    },
+  );
+
+  tool(
+    'load_loop',
+    {
+      title: 'Load a library loop',
+      description:
+        "Replace the current pattern (tempo, swing, length and tracks) with a loop from the library. The user can undo it, but say what you're loading first if they've been working on something.",
+      inputSchema: { id: z.string().describe('Loop id from list_loops, e.g. "Rock/basic-rock-beat"') },
+    },
+    ({ id }) => edit((s) => ops.loadLoop(s, library.get(id))),
   );
 
   tool(

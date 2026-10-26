@@ -1,0 +1,16 @@
+{
+  "name": "Bossa Nova",
+  "description": "Brazilian bossa nova: a soft “boom, ba-boom” kick under a cross-stick clave pattern that repeats every bar.",
+  "bpm": 70,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x..x x..x x..x x..x",
+    "rim": "x..x ..x. ..x. .x..",
+    "closed_hat": {
+      "steps": "x.x. x.x. x.x. x.x.",
+      "volume": 0.5
+    }
+  }
+}

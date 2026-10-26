@@ -1,0 +1,17 @@
+{
+  "name": "Disco Strut",
+  "description": "Claps double the backbeat, accented 16th-note hats keep it moving, and a tom fill in the last beat leads back to the top.",
+  "bpm": 116,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... x... x... x...",
+    "snare": ".... x... .... x...",
+    "clap": ".... x... .... x...",
+    "closed_hat": "Xx.x Xx.x Xx.x Xx.x",
+    "open_hat": "..x. ..x. ..x. ....",
+    "high_tom": ".... .... .... .xx.",
+    "low_tom": ".... .... .... ...X"
+  }
+}

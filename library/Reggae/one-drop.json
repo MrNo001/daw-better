@@ -1,0 +1,13 @@
+{
+  "name": "One Drop",
+  "description": "Reggae one drop: nothing on beat 1. Kick and cross-stick land together on beat 3, leaving the downbeat empty.",
+  "bpm": 76,
+  "swing": 62,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": ".... .... x... ....",
+    "rim": ".... .... x... ....",
+    "closed_hat": "x.x. x.x. x.x. x.x."
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "Reggaeton (Dembow)",
+  "description": "The dembow rhythm behind reggaeton: a steady kick on every beat against a snare on the “a” of 1 and 3 and the “and” of 2 and 4.",
+  "bpm": 95,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... x... x... x...",
+    "snare": "...x ..x. ...x ..x.",
+    "closed_hat": {
+      "steps": "x.x. x.x. x.x. x.x.",
+      "volume": 0.5
+    }
+  }
+}

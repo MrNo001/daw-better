@@ -1,0 +1,13 @@
+{
+  "name": "Rock Shuffle",
+  "description": "A shuffle on a triplet grid: each beat splits into three and the hi-hat plays the first and third, giving the long-short swing of blues and early rock ’n’ roll.",
+  "bpm": 96,
+  "swing": 50,
+  "stepsPerBeat": 3,
+  "length": 12,
+  "tracks": {
+    "kick": "x.. ... x.. ...",
+    "snare": "... x.. ... x..",
+    "closed_hat": "x.x x.x x.x x.x"
+  }
+}

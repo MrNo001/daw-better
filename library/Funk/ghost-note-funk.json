@@ -1,0 +1,16 @@
+{
+  "name": "Ghost Note Funk",
+  "description": "Funk lives in the ghost notes: quiet snare hits between the backbeats make the groove dance around the kick.",
+  "bpm": 98,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x.x. ..x. ..x. ....",
+    "snare": ".... x..o .o.. x..o",
+    "closed_hat": {
+      "steps": "xxxx xxxx xxxx xxxx",
+      "volume": 0.6
+    }
+  }
+}

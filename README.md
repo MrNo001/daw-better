@@ -51,15 +51,40 @@ Things to try:
 - **Tempo** and **Steps** in the display: drag up or down to change them, or click to type.
 - **Grid** sets the subdivision: 16ths, 8ths, triplets, and so on. The counting row above the steps follows it ("1 e + a").
 - **Swing** runs from 50% (straight) to 75%. 66% is a triplet shuffle.
-- The sequencer and Claude panels are windows. Drag them by the title bar, and double-click a title bar to collapse it. This browser remembers where you put them. On narrow screens they stack.
+- The sequencer, Browser and Claude panels are windows. Drag them by the title bar, and double-click a title bar to collapse it. This browser remembers where you put them. On narrow screens they stack.
 
 The pattern is saved to `data/state.json` and restored when the server restarts. Set `DATA_FILE` to save somewhere else, for example to run separate instances side by side with different `PORT`s.
+
+## Loop library
+
+The **Browser** window lists ready-made loops in genre folders: Disco, Funk, Hip-Hop, House, Latin, Pop, Reggae, Rock and Techno. Click a loop to see its description and a preview of the pattern. Double-click it, press **Load into sequencer**, or drag it onto the sequencer to load it. Loading replaces the current pattern, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings the old one back.
+
+Loops are plain JSON files in [library/](library/), one folder per genre. To add one, drop a file like this into a folder (new folders become new genres), then press ↻ in the Browser:
+
+```json
+{
+  "name": "Four on the Floor",
+  "description": "Kick on every beat, snare on 2 and 4, open hi-hat on the off-beats.",
+  "bpm": 120,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... x... x... x...",
+    "snare": ".... x... .... x...",
+    "open_hat": { "steps": "..x. ..x. ..x. ..x.", "volume": 0.6 }
+  }
+}
+```
+
+Track keys are instrument names, and the step strings use the same notation as Claude's tools (see below). To have two tracks with the same sound, give the track its own name and an `instrument` field: `"Ghost Snare": { "instrument": "snare", "steps": "..." }`. Set `LIBRARY_DIR` to keep the library somewhere else.
 
 ## What Claude can do
 
 | Tool            | Purpose                                                            |
 | --------------- | ------------------------------------------------------------------ |
 | `get_state`     | Read the grid as text, plus the user's recent edits                |
+| `list_loops` / `load_loop` | Browse the loop library and load a loop into the sequencer |
 | `set_pattern`   | Write whole tracks from step strings (one undo step)               |
 | `set_steps`     | Change individual steps                                            |
 | `set_transport` | Tempo, swing, length, subdivision, play and stop                   |
@@ -78,6 +103,7 @@ Step strings use one character per step: `X` accent, `x` hit, `o` ghost note, `.
 
 - [server/store.js](server/store.js) holds the single source of truth, with undo history, the activity log and persistence.
 - [server/operations.js](server/operations.js) contains every edit. The browser and Claude go through the same functions, so they can't drift apart.
+- [server/library.js](server/library.js) reads the loop library from disk. It's served to the Browser at `/api/library` and to Claude through `list_loops`.
 - [server/mcp.js](server/mcp.js) defines the MCP tools and the instructions Claude receives when it connects. It runs in stateless Streamable HTTP mode.
 - [public/audio.js](public/audio.js) synthesizes every drum sound, so there are no samples to load. A look-ahead scheduler keeps timing tight, and it keeps playing in a background tab.
 - [public/app.js](public/app.js) renders whatever state the server sends. Claude's edits briefly flash in the grid.

@@ -1,0 +1,13 @@
+{
+  "name": "Half-Time Rock",
+  "description": "Moving the snare to beat 3 makes the same tempo feel half as fast: heavy and spacious. Compare it with the Basic Rock Beat.",
+  "bpm": 140,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... ..x. .... ..x.",
+    "snare": ".... .... x... ....",
+    "closed_hat": "x.x. x.x. x.x. x.x."
+  }
+}

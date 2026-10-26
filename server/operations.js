@@ -71,7 +71,7 @@ function pushTrack(state, instrumentId, name) {
 }
 
 export function defaultState() {
-  const state = { bpm: 100, swing: 50, length: 16, stepsPerBeat: 4, playing: false, tracks: [], note: null };
+  const state = { bpm: 100, swing: 50, length: 16, stepsPerBeat: 4, playing: false, tracks: [], note: null, loop: null };
   for (const id of DEFAULT_KIT) pushTrack(state, id);
   setPattern(state, {
     tracks: { kick: 'x... .... x.x. ....', snare: '.... x... .... x...', closed_hat: 'x.' },
@@ -81,7 +81,8 @@ export function defaultState() {
     body:
       'This is a basic rock beat: kick on beats **1** and **3**, snare on the **backbeat** (2 and 4), ' +
       'and a closed hi-hat on every 8th note.\n\n' +
-      'Press **Space** to play. Click cells to edit, or ask Claude to write a groove, explain one, or quiz you.',
+      'Press **Space** to play. Click cells to edit, pick a genre loop in the **Browser**, ' +
+      'or ask Claude to write a groove, explain one, or quiz you.',
     highlights: [{ track: 'snare', steps: [4, 12] }],
   };
   return state;
@@ -121,7 +122,24 @@ export function sanitize(raw) {
             .map((h) => ({ track: h.track, steps: h.steps.filter(Number.isInteger) })),
         }
       : null;
+  state.loop = typeof raw.loop?.id === 'string' ? { id: raw.loop.id, name: String(raw.loop.name ?? raw.loop.id) } : null;
   return state;
+}
+
+// Replace the whole pattern with a loop from the library (see library.js).
+export function loadLoop(state, loop) {
+  state.bpm = loop.bpm;
+  state.swing = loop.swing;
+  state.stepsPerBeat = loop.stepsPerBeat;
+  state.length = loop.length;
+  state.tracks = [];
+  for (const t of loop.tracks) {
+    const track = pushTrack(state, t.instrument, t.name);
+    track.volume = t.volume;
+    track.steps = [...t.steps];
+  }
+  state.loop = { id: loop.id, name: loop.name };
+  return `loaded ${loop.folder} / ${loop.name}`;
 }
 
 export function setPattern(state, { tracks, clearOthers = false }) {

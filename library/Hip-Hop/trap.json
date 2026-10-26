@@ -1,0 +1,13 @@
+{
+  "name": "Trap",
+  "description": "Trap: a clap on beat 3 gives a half-time feel at a fast tempo, under rolling 16th-note hi-hats.",
+  "bpm": 140,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... .... ..x. ...x",
+    "clap": ".... .... x... ....",
+    "closed_hat": "x.x. x.xx x.x. xxxx"
+  }
+}

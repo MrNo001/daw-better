@@ -1,0 +1,14 @@
+{
+  "name": "Dance Pop",
+  "description": "Four-on-the-floor kick with a clap on 2 and 4, and 16th-note hats whose accents and ghost notes add energy. An open hat lifts into the next bar.",
+  "bpm": 124,
+  "swing": 50,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... x... x... x...",
+    "clap": ".... x... .... x...",
+    "closed_hat": "Xoxo Xoxo Xoxo Xoxo",
+    "open_hat": ".... .... .... ..x."
+  }
+}

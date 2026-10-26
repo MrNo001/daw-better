@@ -1,0 +1,13 @@
+{
+  "name": "Boom Bap",
+  "description": "Classic ’90s boom bap: a swung hi-hat, a heavy kick that skips around, and a cracking snare on 2 and 4.",
+  "bpm": 90,
+  "swing": 58,
+  "stepsPerBeat": 4,
+  "length": 16,
+  "tracks": {
+    "kick": "x... ...x ..x. ....",
+    "snare": ".... x... .... x...",
+    "closed_hat": "x.x. x.x. x.x. x.x."
+  }
+}

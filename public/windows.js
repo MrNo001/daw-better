@@ -2,7 +2,7 @@
 // by its title bar; double-click the title bar or press – to collapse it. Positions are
 // remembered in this browser. On narrow screens the windows stack instead.
 
-const STORAGE_KEY = 'beatlab.windows.v1';
+const STORAGE_KEY = 'beatlab.windows.v2';
 const KEEP_VISIBLE = 120; // px of a window that must stay on screen
 const floating = matchMedia('(min-width: 900px)');
 
