@@ -1,4 +1,4 @@
-// Beat Lab server: serves the web UI, keeps browsers in sync over a WebSocket, and exposes
+// daw-better server: serves the web UI, keeps browsers in sync over a WebSocket, and exposes
 // the same sequencer to Claude as an MCP server at /mcp.
 
 import http from 'node:http';
@@ -140,7 +140,7 @@ app.get('/mcp', methodNotAllowed);
 app.delete('/mcp', methodNotAllowed);
 
 server.listen(PORT, HOST, () => {
-  console.log(`Beat Lab is running at ${appUrl}`);
+  console.log(`daw-better is running at ${appUrl}`);
   console.log(`MCP endpoint: http://127.0.0.1:${PORT}/mcp`);
 });
 

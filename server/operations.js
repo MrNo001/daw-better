@@ -77,7 +77,7 @@ export function defaultState() {
     tracks: { kick: 'x... .... x.x. ....', snare: '.... x... .... x...', closed_hat: 'x.' },
   });
   state.note = {
-    title: 'Welcome to Beat Lab',
+    title: 'Welcome to daw-better',
     body:
       'This is a basic rock beat: kick on beats **1** and **3**, snare on the **backbeat** (2 and 4), ' +
       'and a closed hi-hat on every 8th note.\n\n' +

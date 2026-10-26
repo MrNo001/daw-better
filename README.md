@@ -1,4 +1,4 @@
-# Beat Lab
+# daw-better
 
 A self-hosted drum sequencer for experimenting with rhythm and teaching it, with Claude connected over MCP. You and Claude edit the same pattern: anything Claude writes appears in the grid right away and is heard live while it plays, and Claude can read back what you changed by hand.
 
@@ -20,7 +20,7 @@ Open http://localhost:3030 and click once anywhere to turn on audio (browsers re
 **Claude Code, from any folder:**
 
 ```sh
-claude mcp add --scope user --transport http beat-lab http://127.0.0.1:3030/mcp
+claude mcp add --scope user --transport http daw-better http://127.0.0.1:3030/mcp
 ```
 
 **Claude Desktop:** its config file launches local commands, so bridge to the HTTP endpoint with the community [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) package:
@@ -28,12 +28,12 @@ claude mcp add --scope user --transport http beat-lab http://127.0.0.1:3030/mcp
 ```json
 {
   "mcpServers": {
-    "beat-lab": { "command": "npx", "args": ["-y", "mcp-remote", "http://127.0.0.1:3030/mcp"] }
+    "daw-better": { "command": "npx", "args": ["-y", "mcp-remote", "http://127.0.0.1:3030/mcp"] }
   }
 }
 ```
 
-The Beat Lab server has to be running for Claude to reach it. The Claude card in the app shows when Claude last connected.
+The daw-better server has to be running for Claude to reach it. The Claude card in the app shows when Claude last connected.
 
 Things to try:
 

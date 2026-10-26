@@ -7,7 +7,7 @@ import { INSTRUMENTS } from '../shared/instruments.js';
 import { formatGrid } from './notation.js';
 import * as ops from './operations.js';
 
-const INSTRUCTIONS = `Beat Lab is a drum sequencer open in the user's browser. Every change you make with these tools appears in the grid immediately and is heard live if the pattern is playing. People use it to experiment with rhythm and to learn it.
+const INSTRUCTIONS = `daw-better is a drum sequencer open in the user's browser. Every change you make with these tools appears in the grid immediately and is heard live if the pattern is playing. People use it to experiment with rhythm and to learn it.
 
 - Call get_state before editing if you haven't looked recently: the user edits the grid by hand too, and their recent edits are listed there.
 - Steps are numbered from 1. With 4 steps per beat, a 16-step bar has beats on steps 1, 5, 9 and 13.
@@ -26,13 +26,13 @@ function ago(timestamp) {
 }
 
 export function createMcpServer({ store, library, audience, appUrl }) {
-  const server = new McpServer({ name: 'beat-lab', version: '0.1.0' }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: 'daw-better', version: '0.1.0' }, { instructions: INSTRUCTIONS });
 
   const listening = () => {
     const { clients, audioReady } = audience();
     if (clients === 0) return `\n\nNote: the app isn't open in any browser, so nothing can be heard. Ask the user to open ${appUrl}.`;
     if (store.state.playing && audioReady === 0) {
-      return "\n\nNote: the browser hasn't enabled audio yet. Ask the user to click anywhere on the Beat Lab page once.";
+      return "\n\nNote: the browser hasn't enabled audio yet. Ask the user to click anywhere on the daw-better page once.";
     }
     return '';
   };

@@ -1,4 +1,4 @@
-// Beat Lab UI. The server owns the state; this file renders whatever it sends and turns
+// daw-better UI. The server owns the state; this file renders whatever it sends and turns
 // clicks into actions. Claude's edits arrive the same way, so the grid always shows the
 // pattern both of you are working on.
 
@@ -431,8 +431,8 @@ addEventListener('keydown', (e) => {
 
 // --- browser (loop library) --------------------------------------------------
 
-const LOOP_TYPE = 'application/x-beatlab-loop';
-const OPEN_FOLDERS_KEY = 'beatlab.browser.open';
+const LOOP_TYPE = 'application/x-daw-better-loop';
+const OPEN_FOLDERS_KEY = 'daw-better.browser.open';
 let library = [];
 let selectedLoop = null;
 let openFolders = null;
@@ -697,7 +697,7 @@ for (const inst of INSTRUMENTS) $('add-track').append(new Option(inst.name, inst
 
 // Claude Code can trip over "localhost" resolving to IPv6, so point it at 127.0.0.1.
 const mcpOrigin = location.hostname === 'localhost' ? `${location.protocol}//127.0.0.1:${location.port}` : location.origin;
-$('mcp-cmd').textContent = `claude mcp add --scope user --transport http beat-lab ${mcpOrigin}/mcp`;
+$('mcp-cmd').textContent = `claude mcp add --scope user --transport http daw-better ${mcpOrigin}/mcp`;
 $('copy-cmd').addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText($('mcp-cmd').textContent);
