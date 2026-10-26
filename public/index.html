@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Beat Lab</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="brand"><span class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Beat Lab</div>
+
+      <div class="transport">
+        <button id="stop" class="transport-btn" title="Stop" aria-label="Stop"><span class="i-stop"></span></button>
+        <button id="play" class="transport-btn play" title="Play / stop (Space)" aria-label="Play"><span class="i-play"></span></button>
+      </div>
+
+      <div class="lcd">
+        <label class="lcd-cell" title="Drag up or down, or click to type">
+          <span class="lcd-label">Tempo</span>
+          <input id="bpm" class="lcd-value" type="number" min="30" max="300" step="1" />
+        </label>
+        <div class="lcd-cell" title="Current beat and step">
+          <span class="lcd-label">Beat</span>
+          <output id="position" class="lcd-value">–.–</output>
+        </div>
+        <label class="lcd-cell" title="Pattern length in steps. Drag up or down, or click to type">
+          <span class="lcd-label">Steps</span>
+          <input id="length" class="lcd-value" type="number" min="1" max="64" step="1" />
+        </label>
+      </div>
+
+      <div class="control" id="swing-control">
+        <div class="control-text">
+          <span class="control-label">Swing</span>
+          <output id="swing-out" class="control-value"></output>
+        </div>
+      </div>
+
+      <label class="control">
+        <span class="control-text"><span class="control-label">Grid</span></span>
+        <select id="spb"></select>
+      </label>
+
+      <div class="actions">
+        <button id="undo" class="tool-btn" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+        <button id="redo" class="tool-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+        <button id="clear" class="tool-btn text" title="Clear every step">Clear</button>
+      </div>
+
+      <div class="toolbar-right">
+        <button id="audio-chip" class="chip warn" hidden></button>
+        <span class="chip" title="Connection to the Beat Lab server">
+          <span id="conn-dot" class="dot"></span><span id="conn-text">Connecting…</span>
+        </span>
+      </div>
+    </header>
+
+    <main id="workspace" class="workspace">
+      <section class="window" data-window="sequencer" aria-labelledby="seq-title">
+        <header class="titlebar">
+          <span class="title-icon" aria-hidden="true"></span>
+          <h1 id="seq-title" class="title">Drum Sequencer</h1>
+          <span id="seq-meta" class="title-meta"></span>
+          <button class="win-btn" data-collapse title="Collapse (or double-click the title bar)">–</button>
+        </header>
+        <div class="window-body">
+          <div class="grid-scroll">
+            <div id="grid" class="grid"></div>
+          </div>
+          <footer class="seq-footer">
+            <select id="add-track" aria-label="Add track">
+              <option value="">+ Add track</option>
+            </select>
+            <p class="hint">
+              <b>Left</b>-click or drag to add · <b>right</b>-click or drag to erase · <kbd>Shift</kbd> accent ·
+              <kbd>Alt</kbd> ghost note · press a name to hear it
+            </p>
+          </footer>
+        </div>
+      </section>
+
+      <section id="win-claude" class="window claude-window" data-window="claude" aria-labelledby="claude-title">
+        <header class="titlebar">
+          <span class="badge">Claude</span>
+          <h2 id="claude-title" class="title">Assistant</h2>
+          <span id="claude-status" class="pill">not connected yet</span>
+          <button class="win-btn" data-collapse title="Collapse (or double-click the title bar)">–</button>
+        </header>
+        <div class="window-body">
+          <section id="note-card" class="note" hidden>
+            <header>
+              <h3 id="note-title"></h3>
+              <button id="note-close" class="win-btn" aria-label="Dismiss note">×</button>
+            </header>
+            <div id="note-body" class="note-body"></div>
+          </section>
+
+          <section class="panel">
+            <h4>Activity</h4>
+            <ol id="activity" class="activity"></ol>
+          </section>
+
+          <section class="panel">
+            <h4>Connect</h4>
+            <p>
+              Run <code>claude</code> in the project folder and it connects through the bundled <code>.mcp.json</code>.
+              To use Beat Lab from any folder, add it once:
+            </p>
+            <div class="cmd">
+              <code id="mcp-cmd"></code>
+              <button id="copy-cmd" class="tool-btn text">Copy</button>
+            </div>
+            <p class="muted">Then try: <em>“Teach me a bossa nova beat, one layer at a time.”</em></p>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

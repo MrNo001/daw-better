@@ -1,0 +1,21 @@
+{
+  "name": "beat-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted drum sequencer for experimenting with and teaching rhythm, with Claude connected over MCP",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch-path=server --watch-path=shared server/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "express": "^5.3.0",
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
+  }
+}
