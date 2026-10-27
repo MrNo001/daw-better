@@ -41,6 +41,7 @@ Things to try:
 - "I just changed the hi-hats. What did that do to the feel?"
 - "Make this swing like a J Dilla beat."
 - "Quiz me: write a famous drum pattern and let me guess it."
+- "Build up a funk groove with me and save each stage in a folder called Funk Lesson."
 
 ## Using the sequencer
 
@@ -67,9 +68,15 @@ The pattern is saved to `data/state.json` and restored when the server restarts.
 
 ## Loop library
 
-The **Browser** window lists ready-made loops in genre folders: Disco, Funk, Hip-Hop, House, Latin, Pop, Reggae, Rock and Techno. Click a loop to see its description and a preview of the pattern. Double-click it, press **Load into sequencer**, or drag it onto the sequencer to load it. Loading replaces the current pattern, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings the old one back.
+The **Browser** window lists loops in folders. It comes with genre folders of ready-made grooves: Disco, Funk, Hip-Hop, House, Latin, Pop, Reggae, Rock and Techno. Click a loop to see its description and a preview of the pattern. Double-click it, press **Load into sequencer**, or drag it onto the sequencer to load it. Loading replaces the current pattern, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings the old one back.
 
-Loops are plain JSON files in [library/](library/), one folder per genre. To add one, drop a file like this into a folder (new folders become new genres), then press ↻ in the Browser:
+- **Save pattern** saves the tempo, the drums and the piano-roll notes into a folder, with an optional description. If the pattern came from a library loop, that loop's name is filled in and the button says **Replace**; type a new name to keep both.
+- **New folder** adds a folder, for a genre, a student or a lesson.
+- Drag a loop up or down the list to reorder it, or onto another folder's name to move it there. <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> moves the selected loop from the keyboard.
+
+Every open Browser window updates when the library changes, including when Claude saves a loop.
+
+Loops are plain JSON files in [library/](library/), one folder each. You can also add one by hand: drop a file like this into a folder, then press ↻ in the Browser:
 
 ```json
 {
@@ -87,7 +94,11 @@ Loops are plain JSON files in [library/](library/), one folder per genre. To add
 }
 ```
 
-Track keys are instrument names, and the step strings use the same notation as Claude's tools (see below). To have two tracks with the same sound, give the track its own name and an `instrument` field: `"Ghost Snare": { "instrument": "snare", "steps": "..." }`. Set `LIBRARY_DIR` to keep the library somewhere else.
+Track keys are instrument names, and the step strings use the same notation as Claude's tools (see below). To have two tracks with the same sound, give the track its own name and an `instrument` field: `"Ghost Snare": { "instrument": "snare", "steps": "..." }`.
+
+Synth tracks go under `"synths"`, keyed by sound the same way, with notes in the notation Claude reads them in: `"synths": { "bass": "A2@1+2 C3@7+2 G2@9+2" }`. Loading a loop with synth tracks replaces the piano roll's tracks; a drums-only loop leaves them as they are.
+
+Each folder's `.order.json` remembers the order its loops were arranged in, and loops missing from it are listed after the others, by name. Saved loops land in [library/](library/) next to the built-in ones, so they show up in `git status`. Set `LIBRARY_DIR` to keep the library somewhere else.
 
 ## What Claude can do
 
@@ -95,6 +106,7 @@ Track keys are instrument names, and the step strings use the same notation as C
 | --------------- | ------------------------------------------------------------------ |
 | `get_state`     | Read the grid as text, plus the user's recent edits                |
 | `list_loops` / `load_loop` | Browse the loop library and load a loop into the sequencer |
+| `save_loop` / `move_loop` | Save the pattern into a library folder, and put loops in order |
 | `set_pattern`   | Write whole tracks from step strings (one undo step)               |
 | `set_steps`     | Change individual steps                                            |
 | `set_notes`     | Write notes and chords on a synth track (piano roll)               |
@@ -116,10 +128,10 @@ Notes are given as a pitch name (`"C4"` is middle C, `"F#2"`, `"Bb3"`), a start 
 
 - [server/store.js](server/store.js) holds the single source of truth, with undo history, the activity log and persistence.
 - [server/operations.js](server/operations.js) contains every edit. The browser and Claude go through the same functions, so they can't drift apart.
-- [server/library.js](server/library.js) reads the loop library from disk. It's served to the Browser at `/api/library` and to Claude through `list_loops`.
+- [server/library.js](server/library.js) reads and writes the loop library on disk. The Browser reaches it under `/api/library`, and Claude through the library tools.
 - [server/mcp.js](server/mcp.js) defines the MCP tools and the instructions Claude receives when it connects. It runs in stateless Streamable HTTP mode.
 - [shared/synths.js](shared/synths.js) lists the synth sounds and converts between note names and MIDI numbers, for both the server and the browser.
-- [public/pianoroll.js](public/pianoroll.js) is the Piano Roll window.
+- [public/pianoroll.js](public/pianoroll.js) is the Piano Roll window, and [public/browser.js](public/browser.js) the Browser.
 - [public/audio.js](public/audio.js) synthesizes every drum and synth sound, so there are no samples to load. A look-ahead scheduler keeps timing tight, and it keeps playing in a background tab.
 - [public/app.js](public/app.js) renders whatever state the server sends. Claude's edits briefly flash in the grid.
 - [public/windows.js](public/windows.js) and [public/knob.js](public/knob.js) provide the draggable windows and rotary knobs.
@@ -134,4 +146,4 @@ HOST=0.0.0.0 ALLOWED_HOSTS=localhost,127.0.0.1,studio.local PORT=3030 npm start
 
 In PowerShell: `$env:HOST="0.0.0.0"; $env:ALLOWED_HOSTS="localhost,127.0.0.1,studio.local"; npm start`
 
-There is no authentication. Anyone who can reach the port can edit the pattern and use the MCP endpoint, so only do this on a network you trust. `ALLOWED_HOSTS` lists the hostnames the server accepts, which protects against DNS rebinding and cross-site WebSocket connections.
+There is no authentication. Anyone who can reach the port can edit the pattern, write to the loop library and use the MCP endpoint, so only do this on a network you trust. `ALLOWED_HOSTS` lists the hostnames the server accepts, which protects against DNS rebinding and cross-site WebSocket connections.

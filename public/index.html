@@ -125,14 +125,42 @@
           <button class="win-btn" data-collapse title="Collapse (or double-click the title bar)">–</button>
         </header>
         <div class="window-body browser-body">
+          <div class="browser-toolbar">
+            <button id="save-open" class="tool-btn text" aria-expanded="false" title="Save the current pattern into a folder">
+              Save pattern
+            </button>
+            <button id="folder-new" class="tool-btn text" title="Make a new folder">New folder</button>
+          </div>
+          <form id="save-form" class="save-form" hidden>
+            <label class="field">
+              <span>Name</span>
+              <input id="save-name" type="text" maxlength="60" autocomplete="off" placeholder="My groove" />
+            </label>
+            <label class="field">
+              <span>Folder</span>
+              <select id="save-folder"></select>
+            </label>
+            <label class="field">
+              <span>Description <i>optional</i></span>
+              <textarea id="save-description" rows="2" maxlength="500" placeholder="What to listen for"></textarea>
+            </label>
+            <p id="save-note" class="hint"></p>
+            <div class="save-actions">
+              <button type="button" id="save-cancel" class="tool-btn text">Cancel</button>
+              <button type="submit" id="save-submit" class="tool-btn text primary">Save</button>
+            </div>
+          </form>
           <ul id="library" class="tree" role="tree" aria-label="Loop library"></ul>
           <section id="loop-details" class="loop-details" hidden>
             <h3 id="loop-name"></h3>
             <p id="loop-meta" class="loop-meta"></p>
             <div id="loop-preview" class="loop-preview" aria-hidden="true"></div>
             <p id="loop-description" class="loop-description"></p>
-            <button id="loop-load" class="tool-btn text load-btn">Load into sequencer</button>
-            <p class="hint">Or double-click a loop, or drag it onto the sequencer.</p>
+            <button id="loop-load" class="tool-btn text primary load-btn">Load into sequencer</button>
+            <p class="hint">
+              Or double-click it, or drag it onto the sequencer. Drag it up or down the list to reorder
+              (<kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd>).
+            </p>
           </section>
         </div>
       </section>

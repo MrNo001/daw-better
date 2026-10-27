@@ -7,6 +7,7 @@ import { DrumEngine } from './audio.js';
 import { createKnob } from './knob.js';
 import { initWindows } from './windows.js';
 import { createPianoRoll } from './pianoroll.js';
+import { createBrowser } from './browser.js';
 
 const VELOCITY = { normal: 0.8, accent: 1, ghost: 0.45 };
 const SUBDIVISIONS = { 1: 'quarters', 2: '8ths', 3: 'triplets', 4: '16ths', 5: 'quintuplets', 6: '16th triplets', 7: 'septuplets', 8: '32nds' };
@@ -36,6 +37,7 @@ function connect() {
     retries = 0;
     setConnected(true);
     reportAudio();
+    if (state) browser.load(); // reconnected: the library may have changed meanwhile
   };
   socket.onclose = () => {
     setConnected(false);
@@ -45,6 +47,7 @@ function connect() {
     const msg = JSON.parse(event.data);
     if (msg.type === 'error') toast(msg.message);
     if (msg.type === 'sync') applySync(msg);
+    if (msg.type === 'library') browser.load();
   };
 }
 
@@ -68,7 +71,8 @@ function applySync(msg) {
   meta = msg.meta;
   renderGrid(previous, msg.source);
   pianoRoll.render(previous, msg.source);
-  renderLoopIndicator(previous);
+  renderLoopIndicator();
+  browser.sync(previous);
   renderTransport();
   renderNote(previous);
   renderActivity();
@@ -437,186 +441,15 @@ addEventListener('keydown', (e) => {
   }
 });
 
-// --- browser (loop library) --------------------------------------------------
+// --- loop indicator ----------------------------------------------------------
 
-const LOOP_TYPE = 'application/x-daw-better-loop';
-const OPEN_FOLDERS_KEY = 'daw-better.browser.open';
-let library = [];
-let selectedLoop = null;
-let openFolders = null;
-
-const findLoop = (id) => library.flatMap((f) => f.loops).find((l) => l.id === id) ?? null;
-
-function saveOpenFolders() {
-  try {
-    localStorage.setItem(OPEN_FOLDERS_KEY, JSON.stringify([...openFolders]));
-  } catch {
-    // Not persisting which folders are open is fine.
-  }
-}
-
-async function loadLibrary() {
-  try {
-    library = await (await fetch('/api/library')).json();
-  } catch {
-    toast('Could not load the loop library.');
-    return;
-  }
-  if (!openFolders) {
-    let saved = null;
-    try {
-      saved = JSON.parse(localStorage.getItem(OPEN_FOLDERS_KEY));
-    } catch {}
-    openFolders = new Set(saved ?? [state?.loop?.id.split('/')[0] ?? library[0]?.name].filter(Boolean));
-  }
-  selectedLoop = findLoop(selectedLoop?.id ?? state?.loop?.id);
-  renderLibrary();
-}
-
-function renderLibrary() {
-  const tree = $('library');
-  if (library.length === 0) {
-    tree.replaceChildren(el('li', 'tree-row muted', 'No loops yet. Add some to the library folder.'));
-    return renderLibraryState();
-  }
-  tree.replaceChildren(
-    ...library.map((folder) => {
-      const item = el('li', 'folder');
-      item.dataset.folder = folder.name;
-      item.setAttribute('role', 'treeitem');
-      const row = el('button', 'tree-row');
-      row.append(el('span', 'chevron'), el('span', 'folder-icon'), el('span', 'folder-name', folder.name), el('span', 'tree-count', String(folder.loops.length)));
-      const group = el('ul');
-      group.setAttribute('role', 'group');
-      for (const loop of folder.loops) {
-        const li = el('li', 'tree-row loop-row');
-        li.dataset.id = loop.id;
-        li.setAttribute('role', 'treeitem');
-        li.tabIndex = 0;
-        li.draggable = true;
-        li.title = `${loop.name}: double-click or drag onto the sequencer to load`;
-        li.append(el('span', 'loop-icon'), el('span', 'loop-label', loop.name), el('span', 'loop-bpm', String(loop.bpm)));
-        group.append(li);
-      }
-      item.append(row, group);
-      return item;
-    }),
-  );
-  renderLibraryState();
-}
-
-function renderLibraryState() {
-  for (const folder of $('library').querySelectorAll('.folder')) {
-    const open = !!openFolders?.has(folder.dataset.folder);
-    folder.classList.toggle('open', open);
-    folder.setAttribute('aria-expanded', open);
-  }
-  for (const row of $('library').querySelectorAll('.loop-row')) {
-    row.classList.toggle('selected', row.dataset.id === selectedLoop?.id);
-    row.classList.toggle('current', row.dataset.id === state?.loop?.id);
-  }
-  renderLoopDetails();
-}
-
-function renderLoopDetails() {
-  const loop = selectedLoop;
-  $('loop-details').hidden = !loop;
-  if (!loop) return;
-  $('loop-name').textContent = loop.name;
-  $('loop-meta').textContent = `${loop.folder} · ${loop.bpm} BPM${loop.swing > 50 ? ` · swing ${loop.swing}%` : ''} · ${loop.length} steps`;
-  $('loop-description').textContent = loop.description;
-  const preview = $('loop-preview');
-  if (preview.dataset.id === loop.id) return;
-  preview.dataset.id = loop.id;
-  preview.replaceChildren(
-    ...loop.tracks.map((track) => {
-      const row = el('div', 'preview-row');
-      row.style.setProperty('--c', instruments[track.instrument].color);
-      track.steps.forEach((v, i) => {
-        const dot = el('i', v > 0 ? 'on' : '');
-        if (i % loop.stepsPerBeat === 0) dot.classList.add('beat-start');
-        dot.style.setProperty('--v', v);
-        row.append(dot);
-      });
-      return row;
-    }),
-  );
-}
-
-// Shows which loop the pattern came from, and reveals it in the browser when it changes
-// (also when Claude loads one).
-function renderLoopIndicator(previous) {
+// Shows in the sequencer's title bar which library loop the pattern came from.
+function renderLoopIndicator() {
   const { loop } = state;
   $('seq-loop').hidden = !loop;
   $('seq-loop').textContent = loop?.name ?? '';
-  $('seq-loop').title = loop ? `Started from ${loop.id}` : '';
-  if (loop && library.length && loop.id !== previous?.loop?.id) {
-    openFolders.add(loop.id.split('/')[0]);
-    saveOpenFolders();
-    selectedLoop = findLoop(loop.id) ?? selectedLoop;
-    renderLibraryState();
-    $('library').querySelector(`[data-id="${CSS.escape(loop.id)}"]`)?.scrollIntoView({ block: 'nearest' });
-  } else {
-    renderLibraryState();
-  }
+  $('seq-loop').title = loop ? `From ${loop.id}` : '';
 }
-
-function loadLoop(id) {
-  const loop = findLoop(id);
-  act('loadLoop', { id });
-  if (loop) toast(`Loaded “${loop.name}”. Ctrl+Z to go back.`, 'info');
-}
-
-$('library').addEventListener('click', (e) => {
-  const folderRow = e.target.closest('.folder > .tree-row');
-  if (folderRow) {
-    const name = folderRow.parentElement.dataset.folder;
-    if (!openFolders.delete(name)) openFolders.add(name);
-    saveOpenFolders();
-    return renderLibraryState();
-  }
-  const loopRow = e.target.closest('.loop-row');
-  if (loopRow) {
-    selectedLoop = findLoop(loopRow.dataset.id);
-    renderLibraryState();
-  }
-});
-$('library').addEventListener('dblclick', (e) => {
-  const row = e.target.closest('.loop-row');
-  if (row) loadLoop(row.dataset.id);
-});
-$('library').addEventListener('keydown', (e) => {
-  const row = e.target.closest('.loop-row');
-  if (row && e.key === 'Enter') loadLoop(row.dataset.id);
-});
-$('loop-load').addEventListener('click', () => selectedLoop && loadLoop(selectedLoop.id));
-$('library-refresh').addEventListener('click', loadLibrary);
-
-// Drag a loop from the browser onto the sequencer window to load it.
-const sequencerWindow = $('win-sequencer');
-$('library').addEventListener('dragstart', (e) => {
-  const row = e.target.closest('.loop-row');
-  if (!row) return;
-  e.dataTransfer.setData(LOOP_TYPE, row.dataset.id);
-  e.dataTransfer.effectAllowed = 'copy';
-});
-sequencerWindow.addEventListener('dragover', (e) => {
-  if (!e.dataTransfer.types.includes(LOOP_TYPE)) return;
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'copy';
-  sequencerWindow.classList.add('drop-target');
-});
-sequencerWindow.addEventListener('dragleave', (e) => {
-  if (!sequencerWindow.contains(e.relatedTarget)) sequencerWindow.classList.remove('drop-target');
-});
-sequencerWindow.addEventListener('drop', (e) => {
-  sequencerWindow.classList.remove('drop-target');
-  const id = e.dataTransfer.getData(LOOP_TYPE);
-  if (!id) return;
-  e.preventDefault();
-  loadLoop(id);
-});
-addEventListener('dragend', () => sequencerWindow.classList.remove('drop-target'));
 
 // --- Claude window -----------------------------------------------------------
 
@@ -733,7 +566,8 @@ setInterval(() => {
 }, 15_000);
 
 const pianoRoll = createPianoRoll({ engine, act, getState: () => state });
+const browser = createBrowser({ act, getState: () => state, toast, sequencerWindow: $('win-sequencer') });
 
 renderAudioChip();
 connect();
-loadLibrary();
+browser.load();

@@ -120,11 +120,11 @@ export function initWindows(workspace, defaults = {}) {
 
   place();
   focus(windows[0]);
-  // Windows the user hasn't moved go back to their default spot; call this once the
-  // content that the defaults depend on (like the sequencer's height) has rendered.
-  return { refresh: place };
   floating.addEventListener('change', place);
   addEventListener('resize', () => {
     if (floating.matches) for (const win of windows) move(win, win.offsetLeft, win.offsetTop);
   });
+  // Windows the user hasn't moved go back to their default spot; call this once the
+  // content that the defaults depend on (like the sequencer's height) has rendered.
+  return { refresh: place };
 }

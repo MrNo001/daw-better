@@ -1,4 +1,4 @@
-import { noteName } from '../shared/synths.js';
+import { PITCH_RANGE, noteName, parsePitch } from '../shared/synths.js';
 
 // Text notation used by the MCP tools: one character per step.
 //   X = accent (1.0)   x = hit (0.8)   o = ghost note (0.45)   . or - = rest   1-9 = velocity n/9
@@ -40,17 +40,42 @@ export function stepChar(velocity) {
   return 'o';
 }
 
-function formatSteps(steps, stepsPerBeat) {
-  return steps.map((v, i) => (i > 0 && i % stepsPerBeat === 0 ? ' ' : '') + stepChar(v)).join('');
+// The symbols stand for exact velocities; with `exact`, any other velocity is written as a
+// digit 1-9 instead of the nearest symbol, so a saved loop file keeps it.
+function exactChar(velocity) {
+  if (velocity <= 0) return '.';
+  return { 1: 'X', 0.8: 'x', 0.45: 'o' }[velocity] ?? String(Math.min(9, Math.max(1, Math.round(velocity * 9))));
+}
+
+export function formatSteps(steps, stepsPerBeat, exact = false) {
+  return steps.map((v, i) => (i > 0 && i % stepsPerBeat === 0 ? ' ' : '') + (exact ? exactChar(v) : stepChar(v))).join('');
 }
 
 // Synth notes as "pitch@step+length", e.g. "A2@1+2" is an A2 on step 1 lasting two steps.
 // Velocity is only shown when it isn't the default 0.8.
-function formatNotes(notes) {
-  if (notes.length === 0) return '(no notes)';
+export function formatNotes(notes) {
   return notes
     .map((n) => `${noteName(n.pitch)}@${n.start + 1}+${n.length}${n.velocity === 0.8 ? '' : `(v${+n.velocity.toFixed(2)})`}`)
     .join(' ');
+}
+
+// Reads notes written by formatNotes, as used in loop files: "A2@1+2 C3@7+2(v1)". Steps start
+// at 1, the length defaults to 1 and the velocity to 0.8. Returns 0-based starts.
+export function parseNotes(text, length) {
+  return String(text)
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((token) => {
+      const match = /^([^@]+)@(\d+)(?:\+(\d+))?(?:\(v([\d.]+)\))?$/.exec(token);
+      if (!match) throw new Error(`can't read the note "${token}"; write notes like "A2@1+2"`);
+      const pitch = parsePitch(match[1]);
+      if (pitch === null || pitch < PITCH_RANGE[0] || pitch > PITCH_RANGE[1]) throw new Error(`"${match[1]}" isn't a note between C1 and C7`);
+      const start = Number(match[2]) - 1;
+      if (start < 0 || start >= length) throw new Error(`the note "${token}" starts outside the ${length} steps`);
+      const velocity = match[4] === undefined ? 0.8 : Number(match[4]);
+      if (!(velocity >= 0 && velocity <= 1)) throw new Error(`the velocity in "${token}" must be between 0 and 1`);
+      return { pitch, start, length: Math.max(1, Math.min(Number(match[3] ?? 1), length - start)), velocity };
+    });
 }
 
 export function formatGrid(state) {
@@ -83,7 +108,7 @@ export function formatGrid(state) {
 
   if (synths.length) {
     lines.push('', 'Synth tracks (piano roll), notes as pitch@step+length:');
-    for (const s of synths) lines.push(`${s.id.padEnd(labelWidth)}| ${formatNotes(s.notes)}  [${flags(s, s.preset)}]`);
+    for (const s of synths) lines.push(`${s.id.padEnd(labelWidth)}| ${formatNotes(s.notes) || '(no notes)'}  [${flags(s, s.preset)}]`);
   }
   return lines.join('\n');
 }

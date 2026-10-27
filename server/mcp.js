@@ -6,6 +6,7 @@ import * as z from 'zod';
 import { INSTRUMENTS } from '../shared/instruments.js';
 import { SYNTHS } from '../shared/synths.js';
 import { formatGrid } from './notation.js';
+import { loopFile } from './library.js';
 import * as ops from './operations.js';
 
 const INSTRUCTIONS = `daw-better is a drum sequencer with a piano roll, open in the user's browser. Every change you make with these tools appears on screen immediately and is heard live if the pattern is playing. People use it to experiment with music and to learn it.
@@ -14,7 +15,8 @@ const INSTRUCTIONS = `daw-better is a drum sequencer with a piano roll, open in 
 - Steps are numbered from 1. With 4 steps per beat, a 16-step bar has beats on steps 1, 5, 9 and 13.
 - Drum tracks: set_pattern writes whole tracks in one undoable step; set_steps is for small tweaks.
 - Synth tracks play melodies, bass lines and chords from the piano roll. Write them with set_notes; notes sit on the same step grid as the drums, and several notes with the same start make a chord. Pitches are note names, with C4 as middle C.
-- The loop library (list_loops, load_loop) holds ready-made grooves in genre folders. The user browses the same library in the app's Browser window, and a library loop makes a good starting point to study or vary.
+- The loop library (list_loops, load_loop) holds ready-made grooves in genre folders, plus patterns the user saved. The user browses the same library in the app's Browser window, and a library loop makes a good starting point to study or vary.
+- save_loop saves the current pattern into a library folder. Offer it when the user likes something you made together, or to keep each stage of a lesson; move_loop puts loops in order.
 - When teaching, build a groove up in layers and start playback so the user hears each one. Use show_note to say what to listen for, highlighting the steps you mean, and keep notes short since the grid is the main thing. Invite the user to try a variation by hand, then read it back with get_state and respond to what they did.
 - Everything can be undone, so experiment freely.`;
 
@@ -41,13 +43,13 @@ export function createMcpServer({ store, library, audience, appUrl }) {
 
   const text = (body) => ({ content: [{ type: 'text', text: body }] });
 
-  // Registers a tool whose handler edits the state and returns a summary; the reply
-  // always ends with the updated grid so Claude can check the result.
-  const tool = (name, config, handler) =>
+  // Registers a tool whose handler edits the state and returns a summary; the reply ends
+  // with the updated grid so Claude can check the result, unless `grid` is false.
+  const tool = (name, config, handler, { grid = true } = {}) =>
     server.registerTool(name, config, async (args) => {
       try {
         const summary = handler(args);
-        return text(`${summary}\n\n${formatGrid(store.state)}${listening()}`);
+        return text(grid ? `${summary}\n\n${formatGrid(store.state)}${listening()}` : summary);
       } catch (err) {
         return { ...text(err.message), isError: true };
       }
@@ -86,7 +88,8 @@ export function createMcpServer({ store, library, audience, appUrl }) {
     'list_loops',
     {
       title: 'Browse the loop library',
-      description: 'List the ready-made loops in the library, grouped in genre folders, with tempo and a short description. Load one with load_loop.',
+      description:
+        'List the loops in the library folder by folder, in the order the user arranged them, with tempo and a short description. Load one with load_loop.',
       annotations: { readOnlyHint: true },
     },
     async () => {
@@ -97,9 +100,15 @@ export function createMcpServer({ store, library, audience, appUrl }) {
           .map(
             (f) =>
               `${f.name}\n` +
-              f.loops
-                .map((l) => `- ${l.id}: "${l.name}", ${l.bpm} BPM${l.swing > 50 ? `, swing ${l.swing}%` : ''}. ${l.description}`)
-                .join('\n'),
+              (f.loops
+                .map((l) => {
+                  const synths = l.synths.filter((s) => s.notes.length).map((s) => s.name);
+                  return (
+                    `- ${l.id}: "${l.name}", ${l.bpm} BPM${l.swing > 50 ? `, swing ${l.swing}%` : ''}` +
+                    `${synths.length ? `, synths: ${synths.join(', ')}` : ''}. ${l.description}`
+                  );
+                })
+                .join('\n') || '(empty)'),
           )
           .join('\n\n'),
       );
@@ -111,10 +120,54 @@ export function createMcpServer({ store, library, audience, appUrl }) {
     {
       title: 'Load a library loop',
       description:
-        "Replace the current pattern (tempo, swing, length and tracks) with a loop from the library. The user can undo it, but say what you're loading first if they've been working on something.",
+        'Replace the current pattern with a loop from the library: tempo, swing, length and drum tracks, and the synth tracks too if the loop has any ' +
+        "(otherwise the synth tracks stay). The user can undo it, but say what you're loading first if they've been working on something.",
       inputSchema: { id: z.string().describe('Loop id from list_loops, e.g. "Rock/basic-rock-beat"') },
     },
     ({ id }) => edit((s) => ops.loadLoop(s, library.get(id))),
+  );
+
+  tool(
+    'save_loop',
+    {
+      title: 'Save to the library',
+      description:
+        "Save the current pattern (tempo, drum tracks and synth notes) as a loop in the library, where the user sees it in the Browser window. " +
+        "The folder is created if it doesn't exist. A loop with the same name in that folder is only replaced when replace is true.",
+      inputSchema: {
+        name: z.string().describe('Loop name, e.g. "Bossa Nova, Layer 2"'),
+        folder: z.string().describe('A genre ("Latin") or a lesson ("Lesson 3"), for example'),
+        description: z.string().optional().describe('A sentence or two on what to listen for, shown in the Browser'),
+        replace: z.boolean().optional(),
+      },
+    },
+    ({ name, folder, description, replace }) => {
+      const file = loopFile(store.state, { name, description });
+      const saved = library.save(library.findFolder(folder) ?? library.createFolder(folder), file, { overwrite: replace });
+      return edit((s) => ops.markSaved(s, saved), { undoable: false, record: true });
+    },
+  );
+
+  tool(
+    'move_loop',
+    {
+      title: 'Arrange the library',
+      description:
+        'Move a library loop to another position in its folder, or into another folder (created if needed). ' +
+        'Use it to put a lesson in order, for example.',
+      inputSchema: {
+        id: z.string().describe('Loop id from list_loops'),
+        folder: z.string().optional().describe('Folder to move it to. Default: the one it is in'),
+        position: z.number().int().min(1).optional().describe('1 is the top of the folder. Default: the end'),
+      },
+    },
+    ({ id, folder, position }) => {
+      const target = folder === undefined ? undefined : (library.findFolder(folder) ?? library.createFolder(folder));
+      const moved = library.move(id, target, position === undefined ? undefined : position - 1);
+      edit((s) => ops.loopMoved(s, moved), { undoable: false, record: moved.id !== moved.from });
+      return `"${moved.name}" is number ${moved.position} in ${moved.folder}; its id is ${moved.id}.`;
+    },
+    { grid: false },
   );
 
   tool(

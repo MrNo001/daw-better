@@ -121,7 +121,8 @@ function pushSynth(state, presetId, name) {
   return synth;
 }
 
-const newNoteId = () => `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+let noteCount = 0;
+const newNoteId = () => `n${Date.now().toString(36)}${(++noteCount).toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 
 function makeNote(state, { id, pitch, start, length = 1, velocity = 0.8 }) {
   const midi = parsePitch(pitch);
@@ -263,22 +264,40 @@ export function sanitize(raw) {
 
 // --- edits ---------------------------------------------------------------------
 
-// Replace the drum pattern with a loop from the library (see library.js). Synth tracks
-// stay, trimmed if the loop is shorter.
+// Replace the drum pattern with a loop from the library (see library.js). A loop with synth
+// parts replaces the synth tracks too; otherwise they stay, trimmed if the loop is shorter.
 export function loadLoop(state, loop) {
   state.bpm = loop.bpm;
   state.swing = loop.swing;
   state.stepsPerBeat = loop.stepsPerBeat;
   state.length = loop.length;
   state.tracks = [];
+  if (loop.synths.length) state.synths = [];
   for (const t of loop.tracks) {
     const track = pushTrack(state, t.instrument, t.name);
     track.volume = t.volume;
     track.steps = [...t.steps];
   }
+  for (const s of loop.synths) {
+    const synth = pushSynth(state, s.preset, s.name);
+    synth.volume = s.volume;
+    synth.notes = s.notes.map((n) => makeNote(state, n));
+  }
   trimNotes(state);
   state.loop = { id: loop.id, name: loop.name };
   return `loaded ${loop.folder} / ${loop.name}`;
+}
+
+// After a save the pattern counts as that library loop, like a document after "Save as".
+export function markSaved(state, { id, name, folder, replaced }) {
+  state.loop = { id, name };
+  return `saved the pattern ${replaced ? 'over' : 'as'} ${folder} / ${name}`;
+}
+
+// A library loop moved to another folder: keep pointing at it if it's the one loaded.
+export function loopMoved(state, { from, id, name, folder }) {
+  if (state.loop?.id.toLowerCase() === from.toLowerCase()) state.loop = { ...state.loop, id };
+  return `moved ${name} to ${folder}`;
 }
 
 export function setPattern(state, { tracks, clearOthers = false }) {

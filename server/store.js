@@ -36,9 +36,10 @@ export class Store extends EventEmitter {
    * Run `fn` against the state and broadcast the result. `fn` mutates the state and
    * returns a description. If it throws, the state is left untouched.
    * Edits sharing a `coalesce` key within a short window (a drag across cells, a
-   * slider sweep) become a single undo step.
+   * slider sweep) become a single undo step. With `record`, the description goes in the
+   * activity log even if the state didn't change (saving the same loop again, say).
    */
-  change(source, fn, { undoable = true, coalesce } = {}) {
+  change(source, fn, { undoable = true, coalesce, record = false } = {}) {
     const before = structuredClone(this.state);
     let description;
     try {
@@ -47,9 +48,10 @@ export class Store extends EventEmitter {
       this.state = before;
       throw err;
     }
-    if (JSON.stringify(before) === JSON.stringify(this.state)) return description;
+    const changed = JSON.stringify(before) !== JSON.stringify(this.state);
+    if (!changed && !record) return description;
 
-    if (undoable) {
+    if (undoable && changed) {
       const now = Date.now();
       const merge = coalesce && this.lastCommit?.key === coalesce && now - this.lastCommit.at < COALESCE_MS;
       if (!merge) {

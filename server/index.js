@@ -9,7 +9,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { Store } from './store.js';
-import { Library } from './library.js';
+import { Library, loopFile } from './library.js';
 import { createMcpServer } from './mcp.js';
 import * as ops from './operations.js';
 
@@ -31,6 +31,56 @@ const app = createMcpExpressApp({ host: HOST, allowedHosts: ALLOWED_HOSTS });
 app.use(express.static(path.join(root, 'public')));
 app.use('/shared', express.static(path.join(root, 'shared')));
 app.get('/api/library', (req, res) => res.json(library.list()));
+
+// Browsers send an Origin header with every POST, so other sites can't change the library.
+function sameOrigin({ headers: { origin, host } }) {
+  if (!origin) return true; // not a browser
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}
+
+// Library edits from the Browser window. Each answers with JSON, or { error } and a status.
+function libraryRoute(handler) {
+  return (req, res) => {
+    if (!sameOrigin(req)) return res.status(403).json({ error: 'Requests from other sites are not allowed.' });
+    try {
+      res.json(handler(req.body ?? {}));
+    } catch (err) {
+      res.status(err.status ?? 500).json({ error: err.message });
+    }
+  };
+}
+
+app.post(
+  '/api/library/folders',
+  libraryRoute(({ name }) => {
+    const folder = library.createFolder(name);
+    store.change('user', () => `made the folder ${folder}`, { undoable: false, record: true });
+    return { name: folder };
+  }),
+);
+
+app.post(
+  '/api/library/loops',
+  libraryRoute(({ folder, name, description, overwrite }) => {
+    const saved = library.save(folder, loopFile(store.state, { name, description }), { overwrite: !!overwrite });
+    store.change('user', (s) => ops.markSaved(s, saved), { undoable: false, record: true });
+    return saved;
+  }),
+);
+
+app.post(
+  '/api/library/move',
+  libraryRoute(({ id, folder, index }) => {
+    const moved = library.move(id, folder, index);
+    // Reordering inside a folder isn't worth an activity entry; moving to another folder is.
+    store.change('user', (s) => ops.loopMoved(s, moved), { undoable: false, record: moved.id !== moved.from });
+    return moved;
+  }),
+);
 
 const server = http.createServer(app);
 
@@ -67,10 +117,13 @@ function syncMessage(source = null) {
   });
 }
 
-store.on('change', (source) => {
-  const message = syncMessage(source);
+function broadcast(message) {
   for (const client of wss.clients) if (client.readyState === WebSocket.OPEN) client.send(message);
-});
+}
+
+store.on('change', (source) => broadcast(syncMessage(source)));
+// Every open Browser window reloads the library, whoever changed it.
+library.on('change', () => broadcast(JSON.stringify({ type: 'library' })));
 
 const UI_ACTIONS = {
   setSteps: ops.setSteps,
