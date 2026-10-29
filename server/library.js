@@ -27,7 +27,7 @@ import { EventEmitter } from 'node:events';
 import { INSTRUMENTS, resolveInstrument } from '../shared/instruments.js';
 import { SYNTHS, resolveSynth } from '../shared/synths.js';
 import { parseSteps, parseNotes, formatSteps, formatNotes } from './notation.js';
-import { LIMITS } from './operations.js';
+import { LIMITS, currentPattern } from './operations.js';
 
 const ORDER_FILE = '.order.json';
 // Device names Windows won't accept as file or folder names.
@@ -129,23 +129,24 @@ function trackEntries(tracks, sounds, resolve, soundOf, defaultVolume, content) 
   return entries;
 }
 
-/** The pattern as a loop file, in the same format as the hand-written ones. */
+/** The current pattern, at the song's tempo, as a loop file in the same format as the hand-written ones. */
 export function loopFile(state, { name, description }) {
   const title = String(name ?? '').trim().replace(/\s+/g, ' ');
   if (!title) throw fail(400, 'Give the loop a name.');
   if (title.length > 60) throw fail(400, 'Loop names can be at most 60 characters.');
+  const pattern = currentPattern(state);
   // Synth tracks are saved when any of them has notes; a loop without them leaves the
   // listener's synth tracks alone when it's loaded.
-  const synths = state.synths.some((s) => s.notes.length) ? state.synths : [];
-  if (state.tracks.length + synths.length === 0) throw fail(400, 'There is nothing to save: the pattern has no drum tracks and no notes.');
+  const synths = pattern.synths.some((s) => s.notes.length) ? pattern.synths : [];
+  if (pattern.tracks.length + synths.length === 0) throw fail(400, 'There is nothing to save: the pattern has no drum tracks and no notes.');
 
   const file = { name: title };
   const text = String(description ?? '').trim();
   if (text) file.description = text.slice(0, 500);
-  Object.assign(file, { bpm: state.bpm, swing: state.swing, stepsPerBeat: state.stepsPerBeat, length: state.length });
-  file.tracks = trackEntries(state.tracks, INSTRUMENTS, resolveInstrument, (t) => t.instrument, 0.8, (t) => [
+  Object.assign(file, { bpm: state.bpm, swing: pattern.swing, stepsPerBeat: pattern.stepsPerBeat, length: pattern.length });
+  file.tracks = trackEntries(pattern.tracks, INSTRUMENTS, resolveInstrument, (t) => t.instrument, 0.8, (t) => [
     'steps',
-    formatSteps(t.steps, state.stepsPerBeat, true),
+    formatSteps(t.steps, pattern.stepsPerBeat, true),
   ]);
   if (synths.length) {
     file.synths = trackEntries(synths, SYNTHS, resolveSynth, (s) => s.preset, 0.7, (s) => ['notes', formatNotes(s.notes)]);

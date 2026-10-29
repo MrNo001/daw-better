@@ -13,6 +13,16 @@
       <div class="transport">
         <button id="stop" class="transport-btn" title="Stop" aria-label="Stop"><span class="i-stop"></span></button>
         <button id="play" class="transport-btn play" title="Play / stop (Space)" aria-label="Play"><span class="i-play"></span></button>
+        <div class="mode-switch" role="group" aria-label="What Play plays">
+          <button id="mode-pattern" class="mode-btn" aria-pressed="true" title="Play loops the current pattern">Pattern</button>
+          <button id="mode-song" class="mode-btn" aria-pressed="false" title="Play plays the arrangement in the Playlist">Song</button>
+        </div>
+      </div>
+
+      <div class="control pattern-control">
+        <span class="control-text"><span class="control-label">Pattern</span></span>
+        <select id="pattern-select" aria-label="Current pattern"></select>
+        <button id="pattern-new" class="tool-btn" title="New pattern: the same instruments, nothing written" aria-label="New pattern">+</button>
       </div>
 
       <div class="lcd">
@@ -21,10 +31,10 @@
           <input id="bpm" class="lcd-value" type="number" min="30" max="300" step="1" />
         </label>
         <div class="lcd-cell" title="Current beat and step">
-          <span class="lcd-label">Beat</span>
+          <span id="position-label" class="lcd-label">Beat</span>
           <output id="position" class="lcd-value">–.–</output>
         </div>
-        <label class="lcd-cell" title="Pattern length in steps. Drag up or down, or click to type">
+        <label class="lcd-cell" title="The current pattern's length in steps. Drag up or down, or click to type">
           <span class="lcd-label">Steps</span>
           <input id="length" class="lcd-value" type="number" min="1" max="64" step="1" />
         </label>
@@ -61,7 +71,7 @@
         <header class="titlebar">
           <span class="title-icon" aria-hidden="true"></span>
           <h1 id="seq-title" class="title">Drum Sequencer</h1>
-          <span id="seq-loop" class="title-loop" hidden></span>
+          <span id="seq-pattern" class="title-pattern"></span>
           <span id="seq-meta" class="title-meta"></span>
           <button class="win-btn" data-collapse title="Collapse (or double-click the title bar)">–</button>
         </header>
@@ -85,6 +95,7 @@
         <header class="titlebar">
           <span class="roll-icon" aria-hidden="true"></span>
           <h2 id="roll-title" class="title">Piano Roll</h2>
+          <span id="roll-pattern" class="title-pattern"></span>
           <span id="roll-meta" class="title-meta"></span>
           <button class="win-btn" data-collapse title="Collapse (or double-click the title bar)">–</button>
         </header>
@@ -113,6 +124,50 @@
           <p class="hint roll-hint">
             <b>Left</b>-click to add a note, drag to move it, drag its end to resize · <b>right</b>-click or drag to
             delete · <kbd>Shift</kbd> accent · <kbd>Alt</kbd> soft · click a key to hear it
+          </p>
+        </div>
+      </section>
+
+      <section id="win-playlist" class="window playlist-window resizable" data-window="playlist" aria-labelledby="playlist-title">
+        <header class="titlebar">
+          <span class="playlist-icon" aria-hidden="true"></span>
+          <h2 id="playlist-title" class="title">Playlist</h2>
+          <span id="playlist-meta" class="title-meta"></span>
+          <button class="win-btn" data-collapse title="Collapse (or double-click the title bar)">–</button>
+        </header>
+        <div class="window-body playlist-body">
+          <div class="playlist-main">
+            <aside class="pattern-panel">
+              <div class="pattern-actions">
+                <button id="pattern-add" class="tool-btn text" title="New pattern: the same instruments, nothing written">New</button>
+                <button id="pattern-copy" class="tool-btn text" title="Copy the current pattern, to make a variation">Duplicate</button>
+              </div>
+              <ul id="pattern-list" class="pattern-list" aria-label="Patterns"></ul>
+            </aside>
+            <div class="arrange-pane">
+              <div class="arrange-toolbar">
+                <label class="snap">
+                  Snap
+                  <select id="arrange-snap">
+                    <option value="4">Bar</option>
+                    <option value="1">Beat</option>
+                  </select>
+                </label>
+                <span id="arrange-mode" class="arrange-mode"></span>
+              </div>
+              <div id="arrange-scroll" class="arrange-scroll">
+                <div id="arrange" class="arrange">
+                  <div class="arrange-corner"></div>
+                  <div id="arrange-ruler" class="arrange-ruler"></div>
+                  <div id="arrange-heads" class="arrange-heads"></div>
+                  <div id="arrange-lanes" class="arrange-lanes"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="hint playlist-hint">
+            Drag a pattern onto a lane, or click a lane · drag a clip to move it, its end to repeat it · click it to
+            edit its pattern · <b>right</b>-click deletes
           </p>
         </div>
       </section>
@@ -157,9 +212,12 @@
             <div id="loop-preview" class="loop-preview" aria-hidden="true"></div>
             <p id="loop-description" class="loop-description"></p>
             <button id="loop-load" class="tool-btn text primary load-btn">Load into sequencer</button>
+            <button id="loop-add" class="tool-btn text load-btn" title="Keep the current pattern and add this loop as another one">
+              Add as a new pattern
+            </button>
             <p class="hint">
-              Or double-click it, or drag it onto the sequencer. Drag it up or down the list to reorder
-              (<kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd>).
+              Or double-click it, or drag it onto the sequencer, or onto the Playlist to add it to the song. Drag it up or
+              down the list to reorder (<kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd>).
             </p>
           </section>
         </div>

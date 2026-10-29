@@ -135,14 +135,28 @@ const UI_ACTIONS = {
   addNote: ops.addNote,
   updateNote: ops.updateNote,
   deleteNotes: ops.deleteNotes,
+  newPattern: ops.newPattern,
+  renamePattern: ops.renamePattern,
+  deletePattern: ops.deletePattern,
+  addClip: ops.addClip,
+  updateClip: ops.updateClip,
+  deleteClips: ops.deleteClips,
 };
+
+// A loop dropped on the Playlist becomes a new pattern with a clip where it was dropped.
+function loadLoop(state, { id, asNew, clip }) {
+  const loaded = ops.loadLoop(state, library.get(id), { asNew: !!asNew });
+  return clip ? `${loaded}, ${ops.addClip(state, { ...clip, pattern: state.current })}` : loaded;
+}
 
 function handleAction({ name, args = {}, stroke }) {
   if (name === 'undo') return store.undo('user');
   if (name === 'redo') return store.redo('user');
   if (name === 'setPlaying') return store.change('user', (s) => ops.setPlaying(s, args), { undoable: false });
+  if (name === 'setMode') return store.change('user', (s) => ops.setMode(s, args), { undoable: false });
+  if (name === 'selectPattern') return store.change('user', (s) => ops.selectPattern(s, args), { undoable: false, log: false });
   if (name === 'setNote') return store.change('user', (s) => ops.setNote(s, args), { undoable: false });
-  if (name === 'loadLoop') return store.change('user', (s) => ops.loadLoop(s, library.get(args.id)));
+  if (name === 'loadLoop') return store.change('user', (s) => loadLoop(s, args));
   if (!Object.hasOwn(UI_ACTIONS, name)) throw new Error(`Unknown action "${name}".`);
   return store.change('user', (s) => UI_ACTIONS[name](s, args), { coalesce: stroke });
 }

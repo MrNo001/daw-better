@@ -6,7 +6,7 @@
 import { INSTRUMENTS } from '/shared/instruments.js';
 import { SYNTHS } from '/shared/synths.js';
 
-const LOOP_TYPE = 'application/x-daw-better-loop';
+export const LOOP_TYPE = 'application/x-daw-better-loop';
 const OPEN_FOLDERS_KEY = 'daw-better.browser.open';
 const colors = Object.fromEntries([...INSTRUMENTS, ...SYNTHS].map((s) => [s.id, s.color]));
 
@@ -191,10 +191,11 @@ export function createBrowser({ act, getState, toast, sequencerWindow }) {
     else renderState();
   }
 
-  function loadLoop(id) {
+  function loadLoop(id, asNew = false) {
     const loop = findLoop(id);
-    act('loadLoop', { id });
-    if (loop) toast(`Loaded “${loop.name}”. Ctrl+Z to go back.`, 'info');
+    act('loadLoop', { id, asNew });
+    if (!loop) return;
+    toast(asNew ? `Added “${loop.name}” as a new pattern.` : `Loaded “${loop.name}”. Ctrl+Z to go back.`, 'info');
   }
 
   async function moveLoop(id, folderName, index) {
@@ -252,6 +253,7 @@ export function createBrowser({ act, getState, toast, sequencerWindow }) {
     }
   });
   $('loop-load').addEventListener('click', () => selectedId && loadLoop(selectedId));
+  $('loop-add').addEventListener('click', () => selectedId && loadLoop(selectedId, true));
   $('library-refresh').addEventListener('click', load);
 
   // --- dragging loops ----------------------------------------------------------
@@ -388,11 +390,12 @@ export function createBrowser({ act, getState, toast, sequencerWindow }) {
   }
 
   // Like "Save as" in a document app: the name of the loop the pattern came from is filled
-  // in, so saving it again replaces that loop unless you type a new name.
+  // in, so saving it again replaces that loop unless you type a new name. A pattern that
+  // isn't from the library suggests its own name, if it has been given one.
   function openSave() {
-    const loop = getState()?.loop;
+    const { loop, pattern } = getState() ?? {};
     const current = loop && findLoop(loop.id);
-    nameInput.value = current?.name ?? loop?.name ?? '';
+    nameInput.value = current?.name ?? loop?.name ?? (pattern && !/^Pattern \d+$/.test(pattern.name) ? pattern.name : '');
     descriptionEdited = false;
     fillFolders(selectedFolder ?? current?.folder);
     form.hidden = false;

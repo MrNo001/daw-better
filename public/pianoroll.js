@@ -106,7 +106,9 @@ export function createPianoRoll({ engine, act, getState }) {
       selectNewTrack = false;
     }
     // Follow Claude to the track it just wrote.
-    if (source === 'claude' && previous) {
+    const samePattern = previous?.current === state.current;
+    if (!samePattern) scrolledFor = null; // another pattern: scroll to its notes
+    if (source === 'claude' && samePattern) {
       const changed = state.synths.filter(
         (s) => JSON.stringify(s.notes) !== JSON.stringify(previous.synths.find((p) => p.id === s.id)?.notes),
       );
@@ -117,7 +119,7 @@ export function createPianoRoll({ engine, act, getState }) {
     renderGrid(state);
     renderTabs(state);
     renderControls();
-    renderNotes(state, previous, source);
+    renderNotes(state, samePattern ? previous : null, source);
     if (scrolledFor !== selectedId) scrollToNotes();
     const synth = selected();
     $('roll-meta').textContent = synth ? `${synth.name} · ${synth.notes.length} note${synth.notes.length === 1 ? '' : 's'}` : '';

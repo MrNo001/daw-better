@@ -84,7 +84,7 @@ code, kbd {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 22px;
+  gap: 10px 16px;
   padding: 8px 16px;
   background: linear-gradient(var(--toolbar-top), var(--toolbar-bottom));
   border-bottom: 1px solid var(--window-edge);
@@ -118,6 +118,27 @@ code, kbd {
 .i-stop { width: 12px; height: 12px; border-radius: 2px; background: #c8ccd6; }
 .play.playing { background: linear-gradient(#2f7a45, #22603a); border-color: #0f3a20; }
 .play.playing .i-play { border-left-color: #b8ffcc; filter: drop-shadow(0 0 4px #5dff8f); }
+
+/* Pattern / Song: what Play plays. The lit one glows like the display. */
+.mode-switch { display: flex; flex-direction: column; gap: 2px; margin-left: 2px; }
+.mode-btn {
+  height: 17px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid var(--window-edge);
+  background: #1a1c22;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.mode-btn:hover { color: var(--text); }
+.mode-btn[aria-pressed='true'] { background: var(--lcd-bg); border-color: #000; color: var(--lcd-text); text-shadow: 0 0 6px rgb(125 255 176 / 0.45); }
+
+.pattern-control select { max-width: 150px; }
+.pattern-control .tool-btn { min-width: 30px; height: 28px; padding: 0; }
 
 .lcd {
   display: flex;
@@ -255,6 +276,8 @@ input.lcd-value::-webkit-inner-spin-button, input.lcd-value::-webkit-outer-spin-
   border-radius: 8px;
   box-shadow: 0 14px 40px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.03) inset;
   overflow: hidden;
+  /* Sticky parts inside (the piano keys, the rulers) stack within their own window. */
+  isolation: isolate;
 }
 .window.dragging { box-shadow: 0 22px 60px rgb(0 0 0 / 0.65); opacity: 0.97; }
 
@@ -290,18 +313,20 @@ input.lcd-value::-webkit-inner-spin-button, input.lcd-value::-webkit-outer-spin-
 }
 .win-btn:hover { background: rgb(255 255 255 / 0.08); color: var(--text); }
 .win-btn + .win-btn { margin-left: 0; }
-.title-loop {
+/* The current pattern's name, in the color of its clips in the Playlist. */
+.title-pattern {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   max-width: 220px;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 1px 8px;
+  padding: 1px 8px 1px 7px;
   border-radius: 99px;
   background: #1a1c22;
-  color: var(--accent);
   font-size: 12px;
 }
-.title-loop[hidden] { display: none; }
+.title-pattern::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
 .window.drop-target { outline: 2px dashed var(--accent); outline-offset: -3px; }
 
 .window-body { min-height: 0; overflow: auto; }
@@ -583,6 +608,134 @@ input.lcd-value::-webkit-inner-spin-button, input.lcd-value::-webkit-outer-spin-
 .roll-empty { position: sticky; top: 40%; padding: 20px; color: var(--muted); text-align: center; }
 .roll-hint { flex: none; margin: 0; padding: 6px 12px; border-top: 1px solid var(--window-edge); font-size: 11px; }
 
+/* --- playlist --------------------------------------------------------------- */
+
+.playlist-window { width: 822px; }
+.playlist-window:not(.collapsed) { height: 300px; }
+.playlist-icon {
+  flex: none;
+  width: 14px;
+  height: 10px;
+  background:
+    linear-gradient(90deg, #4dabf7 0 55%, transparent 55%) top / 100% 4px no-repeat,
+    linear-gradient(90deg, transparent 35%, var(--accent) 35% 95%, transparent 95%) bottom / 100% 4px no-repeat;
+}
+.playlist-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.playlist-main { flex: 1; min-height: 0; display: flex; }
+.playlist-hint { flex: none; margin: 0; padding: 6px 12px; border-top: 1px solid var(--window-edge); font-size: 11px; }
+
+.pattern-panel { flex: none; width: 180px; display: flex; flex-direction: column; border-right: 1px solid var(--window-edge); background: rgb(0 0 0 / 0.12); }
+.pattern-actions, .arrange-toolbar { flex: none; height: 38px; display: flex; align-items: center; border-bottom: 1px solid var(--window-edge); }
+.pattern-actions { gap: 6px; padding: 0 8px; }
+.pattern-actions .tool-btn { flex: 1; height: 26px; padding: 0 6px; }
+.pattern-list { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 4px 0; scrollbar-width: thin; scrollbar-color: #444a56 transparent; }
+.pattern-item { display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 6px 0 10px; font-size: 12.5px; cursor: grab; }
+.pattern-item:hover { background: rgb(255 255 255 / 0.05); }
+.pattern-item.current { background: rgb(255 255 255 / 0.08); box-shadow: inset 3px 0 0 var(--c); }
+.pattern-swatch { flex: none; width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.pattern-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pattern-item.current .pattern-name { font-weight: 600; }
+.pattern-length { flex: none; color: var(--muted); font-size: 10.5px; }
+.pattern-place, .pattern-rm { flex: none; display: none; }
+.pattern-item:is(:hover, :focus-within) :is(.pattern-place, .pattern-rm) { display: block; }
+.pattern-item:is(:hover, :focus-within) .pattern-length { display: none; }
+.pattern-place {
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--window-edge);
+  background: linear-gradient(#3d424d, #31353e);
+  font-size: 11px;
+  font-weight: 600;
+}
+.pattern-place:hover { background: linear-gradient(#464b57, #393d47); }
+.pattern-rm { width: 16px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 15px; }
+.pattern-rm:hover:not(:disabled) { color: var(--bad); }
+.pattern-input { flex: 1; min-width: 0; }
+
+.arrange-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.arrange-toolbar { gap: 14px; padding: 0 10px; background: rgb(0 0 0 / 0.12); }
+.snap { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.arrange-mode { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11.5px; }
+.arrange-mode.song { color: var(--ok); }
+.arrange-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: #444a56 transparent; }
+
+.arrange {
+  display: grid;
+  grid-template-columns: var(--heads) max-content;
+  grid-template-rows: 20px max-content;
+  width: max-content;
+}
+.arrange-corner { position: sticky; top: 0; left: 0; z-index: 4; background: var(--window); border-bottom: 1px solid var(--window-edge); }
+.arrange-ruler { position: sticky; top: 0; z-index: 3; display: flex; background: #22252c; border-bottom: 1px solid var(--window-edge); }
+.arrange-ruler span {
+  flex: none;
+  width: calc(var(--beat) * 4);
+  padding-left: 4px;
+  box-shadow: inset 1px 0 0 rgb(255 255 255 / 0.18);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 19px;
+}
+.arrange-heads { position: sticky; left: 0; z-index: 3; display: flex; flex-direction: column; background: #1c1f25; box-shadow: 2px 0 4px rgb(0 0 0 / 0.35); }
+.arrange-heads span { height: var(--lane); display: grid; place-items: center; color: var(--muted); font-size: 10px; box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.45); }
+
+/* Lanes, with a line every beat and a stronger one every bar. */
+.arrange-lanes {
+  position: relative;
+  touch-action: none;
+  background-image:
+    repeating-linear-gradient(to right, transparent 0 calc(var(--beat) * 4 - 1px), rgb(255 255 255 / 0.13) calc(var(--beat) * 4 - 1px) calc(var(--beat) * 4)),
+    repeating-linear-gradient(to right, transparent 0 calc(var(--beat) - 1px), rgb(255 255 255 / 0.035) calc(var(--beat) - 1px) var(--beat)),
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--lane) - 1px), rgb(0 0 0 / 0.45) calc(var(--lane) - 1px) var(--lane)),
+    repeating-linear-gradient(to bottom, #272b33 0 var(--lane), #23262d var(--lane) calc(var(--lane) * 2));
+  cursor: copy;
+}
+.clip {
+  position: absolute;
+  height: calc(var(--lane) - 3px);
+  margin-top: 1px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--c), black 55%);
+  background: linear-gradient(color-mix(in oklab, var(--c), white 10%), color-mix(in oklab, var(--c), black 14%));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+  color: #15171b;
+  cursor: grab;
+}
+.clip[hidden] { display: none; }
+.clip.current { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), 0 0 0 1px rgb(255 255 255 / 0.85); }
+.clip-name { flex: none; padding: 0 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 700; line-height: 12px; }
+.clip-picture { flex: 1; margin-bottom: 2px; background-repeat: repeat-x; }
+.clip-handle { position: absolute; top: 0; right: 0; bottom: 0; width: 7px; cursor: ew-resize; }
+.clip.ghost { opacity: 0.5; border-style: dashed; pointer-events: none; }
+/* Past the end of the song, where song mode goes back to bar 1. */
+.song-end {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  border-left: 2px dashed rgb(245 165 36 / 0.45);
+  background: rgb(0 0 0 / 0.16);
+  pointer-events: none;
+}
+.arrange-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  display: none;
+  width: 2px;
+  margin-left: -1px;
+  background: #ff3b30;
+  box-shadow: 0 0 6px #ff3b30;
+  pointer-events: none;
+}
+.arrange-playhead.on { display: block; }
+
 /* --- browser window --------------------------------------------------------- */
 
 .browser-window { width: 228px; }
@@ -701,6 +854,7 @@ input.lcd-value::-webkit-inner-spin-button, input.lcd-value::-webkit-outer-spin-
 .preview-row i.on { background: var(--c); opacity: calc(0.35 + var(--v) * 0.65); }
 .loop-description { margin: 0 0 10px; font-size: 12px; line-height: 1.45; user-select: text; -webkit-user-select: text; }
 .load-btn { width: 100%; height: 30px; }
+.load-btn + .load-btn { margin-top: 6px; }
 .loop-details .hint { margin-top: 6px; font-size: 11px; }
 
 /* --- Claude window ---------------------------------------------------------- */
@@ -780,9 +934,10 @@ input.lcd-value::-webkit-inner-spin-button, input.lcd-value::-webkit-outer-spin-
   body { height: auto; overflow: auto; }
   .workspace { overflow: visible; display: flex; flex-direction: column; gap: 12px; padding: 12px; }
   .window { position: static; max-width: none; }
-  .claude-window, .browser-window, .roll-window { width: auto; }
+  .claude-window, .browser-window, .roll-window, .playlist-window { width: auto; }
   .browser-window:not(.collapsed) { height: auto; }
   .roll-window:not(.collapsed) { height: 420px; }
+  .playlist-window:not(.collapsed) { height: 360px; }
   .window.resizable { resize: none; min-width: 0; }
   .tree { max-height: 320px; }
   .titlebar { cursor: default; }
@@ -795,4 +950,7 @@ input.lcd-value::-webkit-inner-spin-button, input.lcd-value::-webkit-outer-spin-
   .track-head .knob, .rm, .title-meta { display: none; }
   .titlebar .title { white-space: nowrap; }
   .lcd-cell { padding: 0 8px; }
+  .playlist-main { flex-direction: column; }
+  .pattern-panel { width: auto; max-height: 132px; border-right: 0; border-bottom: 1px solid var(--window-edge); }
+  .playlist-window:not(.collapsed) { height: 460px; }
 }

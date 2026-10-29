@@ -37,9 +37,10 @@ export class Store extends EventEmitter {
    * returns a description. If it throws, the state is left untouched.
    * Edits sharing a `coalesce` key within a short window (a drag across cells, a
    * slider sweep) become a single undo step. With `record`, the description goes in the
-   * activity log even if the state didn't change (saving the same loop again, say).
+   * activity log even if the state didn't change (saving the same loop again, say); with
+   * `log: false` it stays out of the log (switching patterns, which happens all the time).
    */
-  change(source, fn, { undoable = true, coalesce, record = false } = {}) {
+  change(source, fn, { undoable = true, coalesce, record = false, log = true } = {}) {
     const before = structuredClone(this.state);
     let description;
     try {
@@ -61,7 +62,7 @@ export class Store extends EventEmitter {
       this.lastCommit = { key: coalesce, at: now };
       this.future = [];
     }
-    this.commit(source, description, coalesce);
+    this.commit(source, log ? description : null, coalesce);
     return description;
   }
 
@@ -78,7 +79,7 @@ export class Store extends EventEmitter {
     for (; n < count && from.length; n++) {
       to.push(this.state);
       // Undo restores the music, not the transport or the on-screen note.
-      this.state = { ...from.pop(), playing: this.state.playing, note: this.state.note };
+      this.state = { ...from.pop(), playing: this.state.playing, mode: this.state.mode, note: this.state.note };
     }
     if (n === 0) throw new Error(`Nothing to ${label}.`);
     this.lastCommit = null;
@@ -86,12 +87,13 @@ export class Store extends EventEmitter {
     return n;
   }
 
+  // `text` is null for a change that isn't logged.
   commit(source, text, coalesce) {
     const last = this.activity[0];
-    if (coalesce && last?.coalesce === coalesce && last.source === source) {
+    if (text !== null && coalesce && last?.coalesce === coalesce && last.source === source) {
       last.text = text;
       last.at = Date.now();
-    } else {
+    } else if (text !== null) {
       this.activity.unshift({ at: Date.now(), source, text, coalesce });
       this.activity.length = Math.min(this.activity.length, ACTIVITY_LIMIT);
     }

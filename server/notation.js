@@ -1,4 +1,5 @@
 import { PITCH_RANGE, noteName, parsePitch } from '../shared/synths.js';
+import { BEATS_PER_BAR, barLabel, lengthLabel } from '../shared/patterns.js';
 
 // Text notation used by the MCP tools: one character per step.
 //   X = accent (1.0)   x = hit (0.8)   o = ghost note (0.45)   . or - = rest   1-9 = velocity n/9
@@ -78,11 +79,18 @@ export function parseNotes(text, length) {
     });
 }
 
+const currentPattern = (state) => state.patterns.find((p) => p.id === state.current) ?? state.patterns[0];
+
+// The current pattern as a text grid, the way Claude sees what the sequencer and piano roll show.
 export function formatGrid(state) {
-  const { bpm, swing, length, stepsPerBeat: spb, playing, tracks, synths } = state;
+  const pattern = currentPattern(state);
+  const { length, stepsPerBeat: spb, swing, tracks, synths } = pattern;
   const beats = +(length / spb).toFixed(2);
+  const position = state.patterns.length > 1 ? `, ${state.patterns.indexOf(pattern) + 1} of ${state.patterns.length}` : '';
   const lines = [
-    `${playing ? 'PLAYING' : 'STOPPED'} · ${bpm} BPM · swing ${swing}% · ` +
+    `${state.playing ? 'PLAYING' : 'STOPPED'} · ` +
+      `${state.mode === 'song' ? 'song mode (Play plays the arrangement)' : 'pattern mode (Play loops the current pattern)'} · ${state.bpm} BPM`,
+    `Current pattern "${pattern.name}" (${pattern.id}${position}): swing ${swing}% · ` +
       `${length} steps at ${spb} per beat (${SUBDIVISIONS[spb] ?? 'custom subdivision'}) = ${beats} beats`,
     '',
   ];
@@ -109,6 +117,28 @@ export function formatGrid(state) {
   if (synths.length) {
     lines.push('', 'Synth tracks (piano roll), notes as pitch@step+length:');
     for (const s of synths) lines.push(`${s.id.padEnd(labelWidth)}| ${formatNotes(s.notes) || '(no notes)'}  [${flags(s, s.preset)}]`);
+  }
+  return lines.join('\n');
+}
+
+// Every pattern and the song arrangement, lane by lane.
+export function formatSong(state) {
+  const names = new Map(state.patterns.map((p) => [p.id, p.name]));
+  const lines = [
+    'Patterns: ' +
+      state.patterns
+        .map((p) => `"${p.name}" (${p.id}, ${lengthLabel(p.length / p.stepsPerBeat)}${p.id === state.current ? ', current' : ''})`)
+        .join(', '),
+  ];
+  if (state.arrangement.length === 0) {
+    lines.push('Arrangement: empty.');
+    return lines.join('\n');
+  }
+  const end = Math.max(...state.arrangement.map((c) => c.start + c.length));
+  lines.push(`Arrangement, ${lengthLabel(Math.ceil(end / BEATS_PER_BAR) * BEATS_PER_BAR)} in 4/4 (a clip longer than its pattern repeats it):`);
+  for (const lane of [...new Set(state.arrangement.map((c) => c.lane))].sort((a, b) => a - b)) {
+    const clips = state.arrangement.filter((c) => c.lane === lane);
+    lines.push(`- lane ${lane + 1}: ${clips.map((c) => `"${names.get(c.pattern)}" at ${barLabel(c.start)} for ${lengthLabel(c.length)}`).join('; ')}`);
   }
   return lines.join('\n');
 }

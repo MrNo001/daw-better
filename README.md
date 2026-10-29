@@ -1,6 +1,6 @@
 # daw-better
 
-A self-hosted drum sequencer and piano roll for experimenting with music and teaching it, with Claude connected over MCP. You and Claude edit the same pattern: anything Claude writes appears on screen right away and is heard live while it plays, and Claude can read back what you changed by hand.
+A self-hosted drum sequencer, piano roll and playlist for experimenting with music and teaching it, with Claude connected over MCP. You and Claude edit the same song: anything Claude writes appears on screen right away and is heard live while it plays, and Claude can read back what you changed by hand.
 
 This is the start of a larger DAW project built around experimenting with music and learning it with AI.
 
@@ -42,6 +42,7 @@ Things to try:
 - "Make this swing like a J Dilla beat."
 - "Quiz me: write a famous drum pattern and let me guess it."
 - "Build up a funk groove with me and save each stage in a folder called Funk Lesson."
+- "Write an intro, a verse and a chorus as separate patterns, then arrange them into a song."
 
 ## Using the sequencer
 
@@ -52,7 +53,7 @@ Things to try:
 - **Tempo** and **Steps** in the display: drag up or down to change them, or click to type.
 - **Grid** sets the subdivision: 16ths, 8ths, triplets, and so on. The counting row above the steps follows it ("1 e + a").
 - **Swing** runs from 50% (straight) to 75%. 66% is a triplet shuffle.
-- The sequencer, Piano Roll, Browser and Claude panels are windows. Drag them by the title bar, and double-click a title bar to collapse it. Resize the Piano Roll from its bottom-right corner. This browser remembers where you put them. On narrow screens they stack.
+- The sequencer, Piano Roll, Playlist, Browser and Claude panels are windows. Drag them by the title bar, and double-click a title bar to collapse it. Resize the Piano Roll and the Playlist from the bottom-right corner. This browser remembers where you put them. On narrow screens they stack.
 
 ## Piano roll
 
@@ -64,13 +65,27 @@ Synth tracks play bass lines, melodies and chords. They share the drums' tempo, 
 - <kbd>Shift</kbd>-click a note to toggle an accent, <kbd>Alt</kbd>-click to toggle a soft note. Click a key on the keyboard to hear the pitch.
 - The other synth tracks show faintly behind the selected one, so you can line parts up. When Claude writes notes, the roll switches to that track and the new notes flash.
 
-The pattern is saved to `data/state.json` and restored when the server restarts. Set `DATA_FILE` to save somewhere else, for example to run separate instances side by side with different `PORT`s.
+## Patterns and the playlist
+
+A song is made of patterns. Each pattern has its own drum and synth tracks, length, grid and swing, while the tempo belongs to the whole song. The sequencer and the Piano Roll always show the current pattern, and its name is in both title bars.
+
+- Pick the current pattern from **Pattern** in the toolbar, or click it in the Playlist's pattern list. **+** (or **New** in the Playlist) makes an empty pattern with the same instruments, and **Duplicate** copies the current one, for a variation.
+- In the pattern list, double-click a name or press <kbd>F2</kbd> to rename it. **Add** puts the pattern at the end of the song, and × or <kbd>Delete</kbd> deletes it along with its clips.
+- **Pattern** / **Song** in the toolbar picks what Play does: loop the current pattern, or play the arrangement from bar 1 and start over at its end.
+
+The Playlist lays the song out in bars, on up to 16 lanes:
+
+- Drag a pattern from the list onto a lane, or click an empty spot to place the current pattern there.
+- Drag a clip to move it, and drag its right edge to make it longer: a clip longer than its pattern repeats it. <kbd>Ctrl</kbd>-drag copies a clip. **Snap** switches between bars and beats.
+- Click a clip to open its pattern in the sequencer and Piano Roll. Right-click deletes a clip, and right-drag deletes every clip it passes over.
+
+The patterns and the arrangement are saved to `data/state.json` and restored when the server restarts. A save from before patterns existed loads as a single pattern placed at bar 1. Set `DATA_FILE` to save somewhere else, for example to run separate instances side by side with different `PORT`s.
 
 ## Loop library
 
-The **Browser** window lists loops in folders. It comes with genre folders of ready-made grooves: Disco, Funk, Hip-Hop, House, Latin, Pop, Reggae, Rock and Techno. Click a loop to see its description and a preview of the pattern. Double-click it, press **Load into sequencer**, or drag it onto the sequencer to load it. Loading replaces the current pattern, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings the old one back.
+The **Browser** window lists loops in folders. It comes with genre folders of ready-made grooves: Disco, Funk, Hip-Hop, House, Latin, Pop, Reggae, Rock and Techno. Click a loop to see its description and a preview of the pattern. Double-click it, press **Load into sequencer**, or drag it onto the sequencer to load it. Loading replaces the current pattern and sets the tempo, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> brings the old one back. **Add as a new pattern** keeps the current pattern and adds the loop as another one, at the song's tempo; dragging a loop onto the Playlist does the same and places it where you drop it.
 
-- **Save pattern** saves the tempo, the drums and the piano-roll notes into a folder, with an optional description. If the pattern came from a library loop, that loop's name is filled in and the button says **Replace**; type a new name to keep both.
+- **Save pattern** saves the current pattern's drums, piano-roll notes and swing, with the tempo, into a folder, with an optional description. If the pattern came from a library loop, that loop's name is filled in and the button says **Replace**; type a new name to keep both.
 - **New folder** adds a folder, for a genre, a student or a lesson.
 - Drag a loop up or down the list to reorder it, or onto another folder's name to move it there. <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> moves the selected loop from the keyboard.
 
@@ -104,13 +119,16 @@ Each folder's `.order.json` remembers the order its loops were arranged in, and 
 
 | Tool            | Purpose                                                            |
 | --------------- | ------------------------------------------------------------------ |
-| `get_state`     | Read the grid as text, plus the user's recent edits                |
-| `list_loops` / `load_loop` | Browse the loop library and load a loop into the sequencer |
-| `save_loop` / `move_loop` | Save the pattern into a library folder, and put loops in order |
+| `get_state`     | Read the current pattern as text, the song's patterns and arrangement, and the user's recent edits |
+| `list_loops` / `load_loop` | Browse the loop library and load a loop into the current pattern, or as a new one |
+| `save_loop` / `move_loop` | Save the current pattern into a library folder, and put loops in order |
+| `new_pattern` / `select_pattern` | Make a pattern (empty or a copy), and pick the one the editing tools change |
+| `rename_pattern` / `delete_pattern` | Name a pattern after its song part, or delete it with its clips |
+| `arrange`       | Place patterns in the Playlist by bar and lane, repeated to any length |
 | `set_pattern`   | Write whole tracks from step strings (one undo step)               |
 | `set_steps`     | Change individual steps                                            |
 | `set_notes`     | Write notes and chords on a synth track (piano roll)               |
-| `set_transport` | Tempo, swing, length, subdivision, play and stop                   |
+| `set_transport` | Tempo, swing, length, subdivision, pattern or song mode, play and stop |
 | `set_track`     | Volume, mute, solo, name, sound (drum or synth track)              |
 | `add_track` / `remove_track` / `clear` | Arrange drum and synth tracks               |
 | `show_note`     | Show an explanation beside the grid and highlight steps            |
@@ -130,9 +148,9 @@ Notes are given as a pitch name (`"C4"` is middle C, `"F#2"`, `"Bb3"`), a start 
 - [server/operations.js](server/operations.js) contains every edit. The browser and Claude go through the same functions, so they can't drift apart.
 - [server/library.js](server/library.js) reads and writes the loop library on disk. The Browser reaches it under `/api/library`, and Claude through the library tools.
 - [server/mcp.js](server/mcp.js) defines the MCP tools and the instructions Claude receives when it connects. It runs in stateless Streamable HTTP mode.
-- [shared/synths.js](shared/synths.js) lists the synth sounds and converts between note names and MIDI numbers, for both the server and the browser.
-- [public/pianoroll.js](public/pianoroll.js) is the Piano Roll window, and [public/browser.js](public/browser.js) the Browser.
-- [public/audio.js](public/audio.js) synthesizes every drum and synth sound, so there are no samples to load. A look-ahead scheduler keeps timing tight, and it keeps playing in a background tab.
+- [shared/synths.js](shared/synths.js) lists the synth sounds and converts between note names and MIDI numbers, and [shared/patterns.js](shared/patterns.js) holds the bar and pattern-length helpers, for both the server and the browser.
+- [public/pianoroll.js](public/pianoroll.js) is the Piano Roll window, [public/playlist.js](public/playlist.js) the Playlist, and [public/browser.js](public/browser.js) the Browser.
+- [public/audio.js](public/audio.js) synthesizes every drum and synth sound, so there are no samples to load. A look-ahead scheduler plays the current pattern or the whole arrangement, keeps timing tight through tempo changes, and keeps playing in a background tab.
 - [public/app.js](public/app.js) renders whatever state the server sends. Claude's edits briefly flash in the grid.
 - [public/windows.js](public/windows.js) and [public/knob.js](public/knob.js) provide the draggable windows and rotary knobs.
 
@@ -146,4 +164,4 @@ HOST=0.0.0.0 ALLOWED_HOSTS=localhost,127.0.0.1,studio.local PORT=3030 npm start
 
 In PowerShell: `$env:HOST="0.0.0.0"; $env:ALLOWED_HOSTS="localhost,127.0.0.1,studio.local"; npm start`
 
-There is no authentication. Anyone who can reach the port can edit the pattern, write to the loop library and use the MCP endpoint, so only do this on a network you trust. `ALLOWED_HOSTS` lists the hostnames the server accepts, which protects against DNS rebinding and cross-site WebSocket connections.
+There is no authentication. Anyone who can reach the port can edit the song, write to the loop library and use the MCP endpoint, so only do this on a network you trust. `ALLOWED_HOSTS` lists the hostnames the server accepts, which protects against DNS rebinding and cross-site WebSocket connections.

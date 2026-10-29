@@ -3,11 +3,13 @@
 // pattern both of you are working on.
 
 import { INSTRUMENTS } from '/shared/instruments.js';
-import { DrumEngine } from './audio.js';
+import { BEATS_PER_BAR, PATTERN_COLORS } from '/shared/patterns.js';
+import { DrumEngine, TICKS, currentStep } from './audio.js';
 import { createKnob } from './knob.js';
 import { initWindows } from './windows.js';
 import { createPianoRoll } from './pianoroll.js';
 import { createBrowser } from './browser.js';
+import { createPlaylist } from './playlist.js';
 
 const VELOCITY = { normal: 0.8, accent: 1, ghost: 0.45 };
 const SUBDIVISIONS = { 1: 'quarters', 2: '8ths', 3: 'triplets', 4: '16ths', 5: 'quintuplets', 6: '16th triplets', 7: 'septuplets', 8: '32nds' };
@@ -27,6 +29,7 @@ let meta = {};
 let socket = null;
 let retries = 0;
 let gridSignature = '';
+let patternSignature = '';
 let paint = null;
 
 // --- connection --------------------------------------------------------------
@@ -63,21 +66,32 @@ function setConnected(on) {
   $('conn-text').textContent = on ? 'Connected' : 'Reconnecting…';
 }
 
+// The server's state, with the current pattern's fields copied to the top level (tracks,
+// synths, length...), since that's the pattern the sequencer and piano roll show and edit.
+function view(shared) {
+  // A server started before there were several patterns sends one pattern's fields.
+  shared.patterns ??= [{ ...shared, id: 'p1', name: 'Pattern 1', color: 0, synths: shared.synths ?? [] }];
+  shared.arrangement ??= [];
+  const pattern = shared.patterns.find((p) => p.id === shared.current) ?? shared.patterns[0];
+  const { tracks, synths, length, stepsPerBeat, swing, loop } = pattern;
+  return { ...shared, current: pattern.id, pattern, tracks, synths, length, stepsPerBeat, swing, loop };
+}
+
 function applySync(msg) {
   const previous = state;
-  state = msg.state;
-  state.synths ??= []; // a server started before synth tracks existed sends none
+  state = view(msg.state);
   activity = msg.activity;
   meta = msg.meta;
   renderGrid(previous, msg.source);
   pianoRoll.render(previous, msg.source);
-  renderLoopIndicator();
+  playlist.render();
+  renderPatternControls();
   browser.sync(previous);
   renderTransport();
   renderNote(previous);
   renderActivity();
   renderClaudeStatus();
-  syncPlayback();
+  syncPlayback(previous);
   if (!previous) windows.refresh(); // the sequencer now has its real height
 }
 
@@ -94,8 +108,10 @@ async function unlockAudio() {
   syncPlayback();
 }
 
-function syncPlayback() {
+function syncPlayback(previous) {
   if (!state) return renderAudioChip();
+  // Switching between pattern and song mode starts playback over from the top.
+  if (engine.running && previous && previous.mode !== state.mode) engine.stop();
   if (state.playing && engine.ready && !engine.running) engine.start(() => state);
   else if (!state.playing && engine.running) engine.stop();
   $('play').classList.toggle('playing', state.playing);
@@ -116,12 +132,25 @@ const isAudible = (track, anySolo) => !track.mute && (!anySolo || track.solo);
 // Solo is global: soloing a synth track silences unsoloed drum tracks and vice versa.
 const anySoloed = () => [...state.tracks, ...state.synths].some((t) => t.solo);
 
-engine.onStep = (step) => {
+// The playhead: the song position in the Playlist, and in song mode the sequencer and piano
+// roll only follow while a clip of the current pattern is playing.
+engine.onTick = (tick) => {
+  const song = state.mode === 'song';
+  const now = tick < 0 ? null : currentStep(state, tick);
+  const step = now?.step ?? -1;
   pianoRoll.setPlayhead(step);
+  playlist.setPlayhead(song ? tick : -1);
   for (const node of grid.querySelectorAll('.now')) node.classList.remove('now');
-  $('position').value = step < 0 ? '–.–' : `${Math.floor(step / state.stepsPerBeat) + 1}.${(step % state.stepsPerBeat) + 1}`;
+  const beat = Math.floor(tick / TICKS);
+  $('position').value =
+    tick < 0
+      ? '–.–'
+      : song
+        ? `${Math.floor(beat / BEATS_PER_BAR) + 1}.${(beat % BEATS_PER_BAR) + 1}`
+        : `${Math.floor(step / state.stepsPerBeat) + 1}.${(step % state.stepsPerBeat) + 1}`;
   if (step < 0) return;
   for (const node of grid.querySelectorAll(`[data-step="${step}"]`)) node.classList.add('now');
+  if (!now.onset) return;
   const anySolo = anySoloed();
   for (const track of state.tracks) {
     if (track.steps[step] > 0 && isAudible(track, anySolo)) flash(rows.get(track.id)?.led, 'hit');
@@ -230,7 +259,10 @@ function renderGrid(previous, source) {
   }
 
   const anySolo = anySoloed();
-  const highlighted = new Set((state.note?.highlights ?? []).flatMap((h) => h.steps.map((s) => `${h.track}:${s}`)));
+  // Claude's highlights belong to the pattern the note was written for.
+  const note = state.note?.pattern === undefined || state.note.pattern === state.current ? state.note : null;
+  const highlighted = new Set((note?.highlights ?? []).flatMap((h) => h.steps.map((s) => `${h.track}:${s}`)));
+  const samePattern = previous?.current === state.current;
 
   for (const track of state.tracks) {
     const r = rows.get(track.id);
@@ -251,7 +283,7 @@ function renderGrid(previous, source) {
       cell.style.setProperty('--v', v);
       cell.classList.toggle('hl', highlighted.has(`${track.id}:${i}`));
       // Make Claude's edits easy to spot.
-      if (source === 'claude' && previous && (before?.steps[i] ?? 0) !== v) flash(cell);
+      if (source === 'claude' && samePattern && (before?.steps[i] ?? 0) !== v) flash(cell);
     });
   }
 
@@ -400,10 +432,20 @@ function renderTransport() {
   $('swing-control').title = swingable ? '50% is straight, 66% is a triplet shuffle' : 'Swing needs an even grid';
   $('undo').disabled = !meta.canUndo;
   $('redo').disabled = !meta.canRedo;
+  $('mode-pattern').setAttribute('aria-pressed', state.mode !== 'song');
+  $('mode-song').setAttribute('aria-pressed', state.mode === 'song');
+  $('position-label').textContent = state.mode === 'song' ? 'Bar' : 'Beat';
   if (!engine.running) $('position').value = '–.–';
 }
 
-const togglePlay = () => state && act('setPlaying', { playing: !state.playing });
+function togglePlay() {
+  if (!state) return;
+  if (!state.playing && state.mode === 'song' && !state.arrangement.length) {
+    toast('The song is empty. Drag a pattern into the Playlist first, or switch to Pattern.', 'info');
+    return;
+  }
+  act('setPlaying', { playing: !state.playing });
+}
 
 $('play').addEventListener('click', togglePlay);
 $('stop').addEventListener('click', () => act('setPlaying', { playing: false }));
@@ -415,6 +457,10 @@ $('spb').addEventListener('change', (e) => {
   touch('spb');
   act('setTransport', { stepsPerBeat: Number(e.target.value) });
 });
+$('mode-pattern').addEventListener('click', () => act('setMode', { mode: 'pattern' }));
+$('mode-song').addEventListener('click', () => act('setMode', { mode: 'song' }));
+$('pattern-select').addEventListener('change', (e) => act('selectPattern', { pattern: e.target.value }));
+$('pattern-new').addEventListener('click', () => act('newPattern'));
 $('undo').addEventListener('click', () => act('undo'));
 $('redo').addEventListener('click', () => act('redo'));
 $('clear').addEventListener('click', () => act('clearTracks'));
@@ -441,14 +487,24 @@ addEventListener('keydown', (e) => {
   }
 });
 
-// --- loop indicator ----------------------------------------------------------
+// --- patterns ----------------------------------------------------------------
 
-// Shows in the sequencer's title bar which library loop the pattern came from.
-function renderLoopIndicator() {
-  const { loop } = state;
-  $('seq-loop').hidden = !loop;
-  $('seq-loop').textContent = loop?.name ?? '';
-  $('seq-loop').title = loop ? `From ${loop.id}` : '';
+// The pattern picker in the toolbar, and the current pattern's name in the sequencer's and
+// piano roll's title bars.
+function renderPatternControls() {
+  const select = $('pattern-select');
+  const signature = JSON.stringify(state.patterns.map((p) => [p.id, p.name]));
+  if (signature !== patternSignature) {
+    patternSignature = signature;
+    select.replaceChildren(...state.patterns.map((p) => new Option(p.name, p.id)));
+  }
+  select.value = state.current;
+  const { pattern } = state;
+  for (const chip of [$('seq-pattern'), $('roll-pattern')]) {
+    chip.textContent = pattern.name;
+    chip.title = pattern.loop ? `${pattern.name}, from the library loop ${pattern.loop.id}` : pattern.name;
+    chip.style.setProperty('--c', PATTERN_COLORS[pattern.color % PATTERN_COLORS.length]);
+  }
 }
 
 // --- Claude window -----------------------------------------------------------
@@ -557,6 +613,8 @@ const windows = initWindows($('workspace'), {
     const sequencer = $('win-sequencer');
     return { x: 260, y: Math.min(sequencer.offsetTop + sequencer.offsetHeight + 12, workspace.clientHeight - 200) };
   },
+  // Along the bottom, over the lower part of the piano roll on smaller screens.
+  playlist: (workspace, win) => ({ x: 260, y: Math.max(16, workspace.clientHeight - win.offsetHeight - 16) }),
   claude: (workspace, win) => ({ x: workspace.clientWidth - win.offsetWidth - 16, y: 16 }),
 });
 
@@ -566,6 +624,7 @@ setInterval(() => {
 }, 15_000);
 
 const pianoRoll = createPianoRoll({ engine, act, getState: () => state });
+const playlist = createPlaylist({ act, getState: () => state, toast });
 const browser = createBrowser({ act, getState: () => state, toast, sequencerWindow: $('win-sequencer') });
 
 renderAudioChip();

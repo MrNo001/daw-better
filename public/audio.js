@@ -3,8 +3,15 @@
 // up often and books the notes due in the next ~120ms on the audio clock, which keeps
 // timing tight even when the main thread is busy.
 
+import { BEATS_PER_BAR } from '/shared/patterns.js';
+
 const LOOKAHEAD = 0.12;
 const TICK_MS = 25;
+// Song positions are counted in ticks. Every subdivision from 1 to 8 steps per beat lands on
+// a whole tick, so patterns with different grids can play side by side without drifting.
+export const TICKS = 840;
+// The playhead also moves every 16th note through stretches of the song with nothing in them.
+const GRID = TICKS / 4;
 // 808-style metallic partials used for hats and cymbals.
 const METAL_RATIOS = [2, 3, 4.16, 5.43, 6.79, 8.21];
 
@@ -22,11 +29,49 @@ function createTicker(onTick) {
   }
 }
 
+// What plays when, in ticks: in song mode the arrangement's clips, looping after the last bar;
+// in pattern mode the current pattern, over and over.
+export function timeline(s) {
+  if (s.mode !== 'song') {
+    const end = (s.pattern.length * TICKS) / s.pattern.stepsPerBeat;
+    return { end, clips: [{ pattern: s.pattern, start: 0, end }] };
+  }
+  const patterns = new Map(s.patterns.map((p) => [p.id, p]));
+  const clips = s.arrangement
+    .filter((c) => patterns.has(c.pattern))
+    .map((c) => ({ pattern: patterns.get(c.pattern), start: c.start * TICKS, end: (c.start + c.length) * TICKS }));
+  const beats = Math.max(0, ...s.arrangement.map((c) => c.start + c.length));
+  return { end: Math.max(1, Math.ceil(beats / BEATS_PER_BAR)) * BEATS_PER_BAR * TICKS, clips };
+}
+
+/** Which step of the current pattern is playing at `tick`, or null if it isn't playing then. */
+export function currentStep(s, tick) {
+  for (const clip of timeline(s).clips) {
+    if (clip.pattern !== s.pattern || tick < clip.start || tick >= clip.end) continue;
+    const perStep = TICKS / clip.pattern.stepsPerBeat;
+    const offset = (tick - clip.start) % (clip.pattern.length * perStep);
+    return { step: Math.floor(offset / perStep), onset: offset % perStep === 0 };
+  }
+  return null;
+}
+
+// The first tick from `from` on where some clip has a step, or the playhead moves.
+function nextTick(clips, from, end) {
+  let next = Math.min(end, Math.ceil(from / GRID) * GRID);
+  for (const clip of clips) {
+    if (clip.end <= from || clip.start >= next) continue;
+    const perStep = TICKS / clip.pattern.stepsPerBeat;
+    const tick = clip.start + Math.ceil(Math.max(0, from - clip.start) / perStep) * perStep;
+    if (tick < clip.end) next = Math.min(next, tick);
+  }
+  return next;
+}
+
 export class DrumEngine {
   constructor() {
     this.ctx = null;
     this.running = false;
-    this.onStep = null;
+    this.onTick = null;
     this.queue = [];
     this.openHat = null;
     this.ticker = createTicker(() => this.schedule());
@@ -59,10 +104,11 @@ export class DrumEngine {
     if (!this.ready || this.running) return;
     this.getState = getState;
     this.running = true;
-    this.step = 0;
-    this.nextTime = this.ctx.currentTime + 0.05;
+    this.tick = 0; // the next tick to schedule
+    // Tick `anchor.tick` sounds at `anchor.time`; later ticks follow at the anchor's tempo.
+    this.anchor = { tick: 0, time: this.ctx.currentTime + 0.05, bpm: getState().bpm };
     this.queue = [];
-    this.current = -1;
+    this.shown = -1;
     this.schedule();
     this.ticker.start();
     this.raf = requestAnimationFrame(this.draw);
@@ -73,45 +119,72 @@ export class DrumEngine {
     cancelAnimationFrame(this.raf);
     this.running = false;
     this.queue = [];
-    this.onStep?.(-1);
+    this.onTick?.(-1);
+  }
+
+  timeOf(tick) {
+    return this.anchor.time + ((tick - this.anchor.tick) * 60) / (this.anchor.bpm * TICKS);
   }
 
   schedule() {
     if (!this.running) return;
     const s = this.getState();
-    const swingable = s.stepsPerBeat % 2 === 0;
-    while (this.nextTime < this.ctx.currentTime + LOOKAHEAD) {
-      const i = this.step % s.length;
-      const stepDur = 60 / s.bpm / s.stepsPerBeat;
-      // Swing delays every second step: at 66% the off-beat lands on the triplet.
-      const offset = swingable && i % 2 === 1 ? (s.swing / 100 - 0.5) * 2 * stepDur : 0;
-      const time = this.nextTime + offset;
-      const anySolo = [...s.tracks, ...s.synths].some((t) => t.solo);
-      const audible = (t) => !t.mute && (!anySolo || t.solo);
-      for (const t of s.tracks) {
-        const v = t.steps[i];
-        if (v > 0 && audible(t)) this.trigger(t.instrument, time, v * t.volume);
+    // A tempo change applies from the next unscheduled tick on, without a jump.
+    if (s.bpm !== this.anchor.bpm) this.anchor = { tick: this.tick, time: this.timeOf(this.tick), bpm: s.bpm };
+    const { clips, end } = timeline(s);
+    const horizon = this.ctx.currentTime + LOOKAHEAD;
+    for (;;) {
+      if (this.tick >= end) {
+        // Back to the start. If the song or pattern just got shorter, keep the place in the bar.
+        const shift = end * Math.floor(this.tick / end);
+        this.tick -= shift;
+        this.anchor.tick -= shift;
       }
-      for (const synth of s.synths) {
-        if (!audible(synth)) continue;
-        for (const n of synth.notes) {
-          if (n.start === i) this.playNote(synth.preset, n.pitch, time, n.length * stepDur, n.velocity * synth.volume);
-        }
+      const tick = nextTick(clips, this.tick, end);
+      const time = this.timeOf(tick);
+      if (time >= horizon) break;
+      if (tick === end) {
+        this.tick = end;
+        continue;
       }
-      this.queue.push({ step: i, time });
-      this.nextTime += stepDur;
-      this.step = i + 1;
+      for (const clip of clips) if (tick >= clip.start && tick < clip.end) this.playStep(clip, tick, time);
+      this.queue.push({ tick, time });
+      this.tick = tick + 1;
+    }
+  }
+
+  // Play whatever the clip's pattern has on the step that starts at `tick`, if one does.
+  playStep({ pattern, start, end }, tick, time) {
+    const perStep = TICKS / pattern.stepsPerBeat;
+    if ((tick - start) % perStep) return;
+    const i = ((tick - start) / perStep) % pattern.length;
+    const stepDur = (perStep * 60) / (this.anchor.bpm * TICKS);
+    // Swing delays every second step: at 66% the off-beat lands on the triplet.
+    const swingable = pattern.stepsPerBeat % 2 === 0;
+    const at = time + (swingable && i % 2 === 1 ? (pattern.swing / 100 - 0.5) * 2 * stepDur : 0);
+    const anySolo = [...pattern.tracks, ...pattern.synths].some((t) => t.solo);
+    const audible = (t) => !t.mute && (!anySolo || t.solo);
+    for (const t of pattern.tracks) {
+      const v = t.steps[i];
+      if (v > 0 && audible(t)) this.trigger(t.instrument, at, v * t.volume);
+    }
+    for (const synth of pattern.synths) {
+      if (!audible(synth)) continue;
+      for (const n of synth.notes) {
+        // A note that runs past the end of the clip stops with it.
+        if (n.start === i) this.playNote(synth.preset, n.pitch, at, Math.min(n.length, (end - tick) / perStep) * stepDur, n.velocity * synth.volume);
+      }
     }
   }
 
   // Moves the playhead in sync with what is actually being heard.
   draw = () => {
     const now = this.ctx.currentTime;
-    let step = this.current;
-    while (this.queue.length && this.queue[0].time <= now) step = this.queue.shift().step;
-    if (step !== this.current) {
-      this.current = step;
-      this.onStep?.(step);
+    let tick = this.shown;
+    while (this.queue.length && this.queue[0].time <= now) tick = this.queue.shift().tick;
+    if (tick !== this.shown) {
+      this.shown = tick;
+      this.onTick?.(tick);
     }
     if (this.running) this.raf = requestAnimationFrame(this.draw);
   };

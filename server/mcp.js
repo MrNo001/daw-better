@@ -5,7 +5,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as z from 'zod';
 import { INSTRUMENTS } from '../shared/instruments.js';
 import { SYNTHS } from '../shared/synths.js';
-import { formatGrid } from './notation.js';
+import { BEATS_PER_BAR } from '../shared/patterns.js';
+import { formatGrid, formatSong } from './notation.js';
 import { loopFile } from './library.js';
 import * as ops from './operations.js';
 
@@ -15,6 +16,7 @@ const INSTRUCTIONS = `daw-better is a drum sequencer with a piano roll, open in 
 - Steps are numbered from 1. With 4 steps per beat, a 16-step bar has beats on steps 1, 5, 9 and 13.
 - Drum tracks: set_pattern writes whole tracks in one undoable step; set_steps is for small tweaks.
 - Synth tracks play melodies, bass lines and chords from the piano roll. Write them with set_notes; notes sit on the same step grid as the drums, and several notes with the same start make a chord. Pitches are note names, with C4 as middle C.
+- A project has several patterns. The sequencer and piano roll show the current one, and every track, note and length edit applies to it. new_pattern adds one (empty with the same instruments, or a copy to make a variation) and select_pattern switches. arrange places patterns on the song timeline in the Playlist window; set_transport with mode "song" plays the arrangement, and "pattern" loops the current pattern. Use this to build and teach song form: an intro, a verse and a chorus, a fill at the end of a section, layers that come in and drop out.
 - The loop library (list_loops, load_loop) holds ready-made grooves in genre folders, plus patterns the user saved. The user browses the same library in the app's Browser window, and a library loop makes a good starting point to study or vary.
 - save_loop saves the current pattern into a library folder. Offer it when the user likes something you made together, or to keep each stage of a lesson; move_loop puts loops in order.
 - When teaching, build a groove up in layers and start playback so the user hears each one. Use show_note to say what to listen for, highlighting the steps you mean, and keep notes short since the grid is the main thing. Invite the user to try a variation by hand, then read it back with get_state and respond to what they did.
@@ -62,12 +64,14 @@ export function createMcpServer({ store, library, audience, appUrl }) {
     {
       title: 'Read the sequencer',
       description:
-        "Read what's in the sequencer right now: transport, every drum track's steps as a text grid " +
-        '(X accent, x hit, o ghost note, . rest), every synth track\'s notes, the note on screen, and what the user changed recently.',
+        "Read what's in the sequencer right now: transport, the current pattern's drum tracks as a text grid " +
+        '(X accent, x hit, o ghost note, . rest) and synth notes, the other patterns and the song arrangement, the note on screen, ' +
+        'and what the user changed recently.',
       annotations: { readOnlyHint: true },
     },
     async () => {
-      const { note, loop } = store.state;
+      const { note } = store.state;
+      const { loop } = ops.currentPattern(store.state);
       const recent = store.activity
         .slice(0, 10)
         .map((a) => `- ${ago(a.at)}, ${a.source === 'claude' ? 'you' : 'the user'}: ${a.text}`)
@@ -75,7 +79,8 @@ export function createMcpServer({ store, library, audience, appUrl }) {
       return text(
         [
           formatGrid(store.state),
-          loop ? `Started from library loop ${loop.id} ("${loop.name}"), possibly edited since.` : 'Not based on a library loop.',
+          loop ? `This pattern started from library loop ${loop.id} ("${loop.name}"), possibly edited since.` : 'This pattern is not based on a library loop.',
+          formatSong(store.state),
           note ? `On-screen note: "${note.title || note.body.slice(0, 60)}"` : 'No note on screen.',
           `Recent changes, newest first:\n${recent || '(none yet)'}`,
           `Drum instruments: ${INSTRUMENTS.map((i) => i.id).join(', ')}. Synth sounds: ${SYNTHS.map((s) => s.id).join(', ')}.`,
@@ -121,10 +126,14 @@ export function createMcpServer({ store, library, audience, appUrl }) {
       title: 'Load a library loop',
       description:
         'Replace the current pattern with a loop from the library: tempo, swing, length and drum tracks, and the synth tracks too if the loop has any ' +
-        "(otherwise the synth tracks stay). The user can undo it, but say what you're loading first if they've been working on something.",
-      inputSchema: { id: z.string().describe('Loop id from list_loops, e.g. "Rock/basic-rock-beat"') },
+        "(otherwise the synth tracks stay). The user can undo it, but say what you're loading first if they've been working on something. " +
+        'With as_new_pattern the loop becomes a new pattern instead, ready to arrange, and the tempo stays as it is.',
+      inputSchema: {
+        id: z.string().describe('Loop id from list_loops, e.g. "Rock/basic-rock-beat"'),
+        as_new_pattern: z.boolean().optional().describe('Load it into a new pattern instead of over the current one. Default false'),
+      },
     },
-    ({ id }) => edit((s) => ops.loadLoop(s, library.get(id))),
+    ({ id, as_new_pattern }) => edit((s) => ops.loadLoop(s, library.get(id), { asNew: !!as_new_pattern })),
   );
 
   tool(
@@ -132,7 +141,7 @@ export function createMcpServer({ store, library, audience, appUrl }) {
     {
       title: 'Save to the library',
       description:
-        "Save the current pattern (tempo, drum tracks and synth notes) as a loop in the library, where the user sees it in the Browser window. " +
+        "Save the current pattern (with the tempo, drum tracks and synth notes) as a loop in the library, where the user sees it in the Browser window. " +
         "The folder is created if it doesn't exist. A loop with the same name in that folder is only replaced when replace is true.",
       inputSchema: {
         name: z.string().describe('Loop name, e.g. "Bossa Nova, Layer 2"'),
@@ -167,6 +176,102 @@ export function createMcpServer({ store, library, audience, appUrl }) {
       edit((s) => ops.loopMoved(s, moved), { undoable: false, record: moved.id !== moved.from });
       return `"${moved.name}" is number ${moved.position} in ${moved.folder}; its id is ${moved.id}.`;
     },
+    { grid: false },
+  );
+
+  const patternRef = z.string().describe('Pattern name, id ("p2") or number in the list');
+  // Pattern and arrangement edits answer with the song overview instead of the grid.
+  const song = (summary) => `${summary}\n\n${formatSong(store.state)}${listening()}`;
+
+  tool(
+    'new_pattern',
+    {
+      title: 'Make a new pattern',
+      description:
+        'Add a pattern and switch the sequencer and piano roll to it, so the editing tools write into it. ' +
+        'It has the same instruments as the current pattern with nothing written, or with copy: true a copy of it, to make a variation. ' +
+        'Patterns are the parts of a song; put them on the timeline with arrange.',
+      inputSchema: {
+        name: z.string().optional().describe('e.g. "Verse", "Chorus" or "Fill". Default: "Pattern 2" and so on'),
+        copy: z.boolean().optional().describe("Copy the current pattern's steps and notes too. Default false"),
+      },
+    },
+    ({ name, copy }) => edit((s) => ops.newPattern(s, { name, copy })),
+  );
+
+  tool(
+    'select_pattern',
+    {
+      title: 'Switch pattern',
+      description: 'Show another pattern in the sequencer and piano roll. The editing tools then write into it, and pattern mode loops it.',
+      inputSchema: { pattern: patternRef },
+    },
+    ({ pattern }) => edit((s) => ops.selectPattern(s, { pattern }), { undoable: false }),
+  );
+
+  tool(
+    'rename_pattern',
+    {
+      title: 'Rename a pattern',
+      description: 'Rename a pattern. Names are unique, and the Playlist shows them on the clips.',
+      inputSchema: { pattern: patternRef.optional().describe('Default: the current pattern'), name: z.string() },
+    },
+    ({ pattern, name }) => song(edit((s) => ops.renamePattern(s, { pattern, name }))),
+    { grid: false },
+  );
+
+  tool(
+    'delete_pattern',
+    {
+      title: 'Delete a pattern',
+      description: "Delete a pattern and remove its clips from the arrangement. The last pattern can't be deleted.",
+      inputSchema: { pattern: patternRef },
+      annotations: { destructiveHint: true },
+    },
+    ({ pattern }) => song(edit((s) => ops.deletePattern(s, { pattern }))),
+    { grid: false },
+  );
+
+  tool(
+    'arrange',
+    {
+      title: 'Arrange the song',
+      description:
+        'Place patterns on the song timeline, which the user sees in the Playlist window. A clip plays its pattern for as long as the clip lasts, ' +
+        'repeating it, so a 1-bar pattern in a 4-bar clip plays four times. Clips on different lanes play at the same time, so a drum pattern ' +
+        'and a bass pattern can run together. Bars have 4 beats. The whole call is one undo step. ' +
+        'Use set_transport with mode "song" to hear the arrangement.',
+      inputSchema: {
+        clips: z.array(
+          z.object({
+            pattern: patternRef,
+            bar: z.number().int().min(1).describe('Bar the clip starts on, from 1'),
+            beat: z.number().int().min(1).max(4).optional().describe('Beat within that bar. Default 1'),
+            bars: z.number().int().min(1).optional().describe("How many bars it plays. Default: the pattern's own length"),
+            beats: z.number().int().min(1).optional().describe('Length in beats instead of bars'),
+            lane: z.number().int().min(1).max(16).optional().describe('Default: the lane the pattern already plays on, or the first free one'),
+          }),
+        ),
+        mode: z
+          .enum(['add', 'replace'])
+          .optional()
+          .describe('"add" (default) keeps the clips already there; "replace" rewrites the whole arrangement, and an empty list clears it'),
+      },
+    },
+    ({ clips, mode = 'add' }) =>
+      song(
+        edit((s) =>
+          ops.arrange(s, {
+            replace: mode === 'replace',
+            clips: clips.map((c) => ({
+              pattern: c.pattern,
+              start: (c.bar - 1) * BEATS_PER_BAR + (c.beat ?? 1) - 1,
+              length: c.beats ?? (c.bars === undefined ? undefined : c.bars * BEATS_PER_BAR),
+              lane: c.lane === undefined ? undefined : c.lane - 1,
+            })),
+          }),
+        ),
+      ),
     { grid: false },
   );
 
@@ -244,23 +349,29 @@ export function createMcpServer({ store, library, audience, appUrl }) {
     {
       title: 'Tempo, length and playback',
       description:
-        'Set tempo, swing, pattern length or subdivision, and start or stop playback. ' +
+        "Set the tempo, the current pattern's swing, length or subdivision, what Play plays, and start or stop playback. " +
+        "The tempo is the whole song's; swing, length and steps_per_beat belong to the current pattern. " +
         'Swing runs from 50 (straight) to 75; 66 is a triplet shuffle and only affects even subdivisions. ' +
         'steps_per_beat sets what one step is: 4 = 16th notes, 2 = 8th notes, 3 = 8th-note triplets ' +
         '(length 12 is one bar of 12/8). Changing length keeps existing steps and pads with rests.',
       inputSchema: {
         bpm: z.number().min(30).max(300).optional(),
         swing: z.number().min(50).max(75).optional(),
-        length: z.number().int().min(1).max(64).optional().describe('Number of steps in the loop'),
+        length: z.number().int().min(1).max(64).optional().describe('Number of steps in the current pattern'),
         steps_per_beat: z.number().int().min(1).max(8).optional(),
+        mode: z
+          .enum(['pattern', 'song'])
+          .optional()
+          .describe('"pattern" loops the current pattern; "song" plays the arrangement from bar 1 and loops at its end'),
         playing: z.boolean().optional().describe('true to start playback, false to stop'),
       },
     },
-    ({ bpm, swing, length, steps_per_beat, playing }) => {
+    ({ bpm, swing, length, steps_per_beat, mode, playing }) => {
       const done = [];
       if ([bpm, swing, length, steps_per_beat].some((v) => v !== undefined)) {
         done.push(edit((s) => ops.setTransport(s, { bpm, swing, length, stepsPerBeat: steps_per_beat })));
       }
+      if (mode !== undefined) done.push(edit((s) => ops.setMode(s, { mode }), { undoable: false }));
       if (playing !== undefined) done.push(edit((s) => ops.setPlaying(s, { playing }), { undoable: false }));
       if (done.length === 0) throw new Error('Nothing to change.');
       return done.join('; ');
