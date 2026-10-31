@@ -4,6 +4,10 @@ A self-hosted drum sequencer, piano roll, playlist and mixer for experimenting w
 
 This is the start of a larger DAW project built around experimenting with music and learning it with AI.
 
+![daw-better playing the demo song: the drum sequencer, piano roll and mixer on the left; the playlist, Claude's note and activity, and the loop browser on the right](docs/screenshot.png)
+
+Here Claude has set up the mixer (a compressor on the kick, EQ and reverb on the snare, drive and a filter on the bass) and left a note about the backbeat. The outlined snare steps are the ones the note is about.
+
 ## Quick start
 
 ```sh
