@@ -6,7 +6,8 @@ import * as z from 'zod';
 import { INSTRUMENTS } from '../shared/instruments.js';
 import { SYNTHS } from '../shared/synths.js';
 import { BEATS_PER_BAR } from '../shared/patterns.js';
-import { formatGrid, formatSong } from './notation.js';
+import { EFFECTS, MAX_EFFECTS } from '../shared/mixer.js';
+import { formatGrid, formatSong, formatMixer } from './notation.js';
 import { loopFile } from './library.js';
 import * as ops from './operations.js';
 
@@ -19,11 +20,38 @@ const INSTRUCTIONS = `daw-better is a drum sequencer with a piano roll, open in 
 - A project has several patterns. The sequencer and piano roll show the current one, and every track, note and length edit applies to it. new_pattern adds one (empty with the same instruments, or a copy to make a variation) and select_pattern switches. arrange places patterns on the song timeline in the Playlist window; set_transport with mode "song" plays the arrangement, and "pattern" loops the current pattern. Use this to build and teach song form: an intro, a verse and a chorus, a fill at the end of a section, layers that come in and drop out.
 - The loop library (list_loops, load_loop) holds ready-made grooves in genre folders, plus patterns the user saved. The user browses the same library in the app's Browser window, and a library loop makes a good starting point to study or vary.
 - save_loop saves the current pattern into a library folder. Offer it when the user likes something you made together, or to keep each stage of a lesson; move_loop puts loops in order.
+- The Mixer has a channel for every drum and synth track, shared by all the patterns, plus the master channel. set_mixer sets levels, panning, mute and solo, and the effects each channel runs through: eq, compressor, drive, filter, delay, reverb and chorus. To get close to a sound the user describes or names, think about its tone (eq, filter), dynamics (compressor), grit (drive), space (reverb, delay) and width (chorus). You can't hear the result, so say what a change should do and what to listen for, then ask how it sounds. When teaching, add one effect at a time and solo the channel so the user can hear what it does.
 - When teaching, build a groove up in layers and start playback so the user hears each one. Use show_note to say what to listen for, highlighting the steps you mean, and keep notes short since the grid is the main thing. Invite the user to try a variation by hand, then read it back with get_state and respond to what they did.
 - Everything can be undone, so experiment freely.`;
 
 const trackRef = z.string().describe('Track id, track name, or instrument (e.g. "kick", "hh", "Open Hat", "bass")');
 const stepNumber = z.number().int().min(1).describe('Step number, starting at 1');
+
+// One flat object for any effect: its type plus that type's settings, which the server checks.
+// Settings with the same name in several effects (mix, tone, mode) share one field.
+function effectSchema() {
+  const fields = new Map();
+  for (const effect of EFFECTS) {
+    for (const p of effect.params) {
+      const unit = { '%': '%', ':1': '' }[p.unit] ?? ` ${p.unit}`;
+      const doc = p.options ? p.doc : `${p.doc}, ${p.min} to ${p.max}${unit}`;
+      const field = fields.get(p.id) ?? { param: p, docs: new Map() };
+      field.docs.set(doc, [...(field.docs.get(doc) ?? []), effect.id]);
+      fields.set(p.id, field);
+    }
+  }
+  const shape = {
+    type: z
+      .enum(EFFECTS.map((e) => e.id))
+      .describe(`The effect, with its settings: ${EFFECTS.map((e) => `${e.id} (${e.params.map((p) => p.id).join(', ')})`).join('; ')}`),
+    on: z.boolean().optional().describe('false bypasses the effect but keeps its settings. Default true'),
+  };
+  for (const [id, { param, docs }] of fields) {
+    const description = [...docs].map(([doc, users]) => `${users.join(', ')}: ${doc}`).join('; ');
+    shape[id] = (param.options ? z.string() : z.number().min(param.min).max(param.max)).optional().describe(description);
+  }
+  return z.object(shape);
+}
 
 function ago(timestamp) {
   const s = Math.round((Date.now() - timestamp) / 1000);
@@ -65,8 +93,8 @@ export function createMcpServer({ store, library, audience, appUrl }) {
       title: 'Read the sequencer',
       description:
         "Read what's in the sequencer right now: transport, the current pattern's drum tracks as a text grid " +
-        '(X accent, x hit, o ghost note, . rest) and synth notes, the other patterns and the song arrangement, the note on screen, ' +
-        'and what the user changed recently.',
+        '(X accent, x hit, o ghost note, . rest) and synth notes, the other patterns and the song arrangement, the mixer, ' +
+        'the note on screen, and what the user changed recently.',
       annotations: { readOnlyHint: true },
     },
     async () => {
@@ -81,6 +109,7 @@ export function createMcpServer({ store, library, audience, appUrl }) {
           formatGrid(store.state),
           loop ? `This pattern started from library loop ${loop.id} ("${loop.name}"), possibly edited since.` : 'This pattern is not based on a library loop.',
           formatSong(store.state),
+          formatMixer(store.state),
           note ? `On-screen note: "${note.title || note.body.slice(0, 60)}"` : 'No note on screen.',
           `Recent changes, newest first:\n${recent || '(none yet)'}`,
           `Drum instruments: ${INSTRUMENTS.map((i) => i.id).join(', ')}. Synth sounds: ${SYNTHS.map((s) => s.id).join(', ')}.`,
@@ -180,8 +209,10 @@ export function createMcpServer({ store, library, audience, appUrl }) {
   );
 
   const patternRef = z.string().describe('Pattern name, id ("p2") or number in the list');
-  // Pattern and arrangement edits answer with the song overview instead of the grid.
+  // Pattern and arrangement edits answer with the song overview instead of the grid, and
+  // mixer edits with the mixer.
   const song = (summary) => `${summary}\n\n${formatSong(store.state)}${listening()}`;
+  const mixer = (summary) => `${summary}\n\n${formatMixer(store.state)}${listening()}`;
 
   tool(
     'new_pattern',
@@ -398,6 +429,53 @@ export function createMcpServer({ store, library, audience, appUrl }) {
       },
     },
     (args) => edit((s) => ops.setTrack(s, args)),
+  );
+
+  tool(
+    'set_mixer',
+    {
+      title: 'Mix: levels, panning and effects',
+      description:
+        'Set mixer channels: fader, panning, mute and solo, and the effects the sound runs through, in order. ' +
+        'Every drum and synth track has a channel, shared by all the patterns that have that track ("kick" mixes the kick in every pattern), ' +
+        'and every channel then goes through "master". Effects: eq (tone), compressor (punch; evens out the level), ' +
+        'drive (warm saturation, fuzz or lo-fi crush), filter (low-pass is darker, high-pass thinner), delay (echoes in time with the tempo), ' +
+        'reverb (space) and chorus (width). The whole call is one undo step.',
+      inputSchema: {
+        channels: z
+          .array(
+            z.object({
+              channel: z.string().describe('Track id or name (e.g. "kick", "Bass"), or "master"'),
+              volume: z.number().min(-60).max(6).optional().describe('Fader in dB: 0 leaves the level as it is, -6 is about half as loud, -60 is silent'),
+              pan: z.number().min(-100).max(100).optional().describe('-100 is hard left, 0 center, 100 hard right. Not on master'),
+              mute: z.boolean().optional().describe('Not on master'),
+              solo: z.boolean().optional().describe('Only soloed channels are heard. Not on master'),
+              effects: z
+                .array(effectSchema())
+                .max(MAX_EFFECTS)
+                .optional()
+                .describe(
+                  "The channel's whole effect chain, first to last. An effect that's already on the channel keeps the settings you leave out, " +
+                    'so to change one setting, list the chain with only that setting. Effects not listed are removed; [] removes them all. ' +
+                    'Leave it out to keep the effects as they are.',
+                ),
+            }),
+          )
+          .min(1),
+      },
+    },
+    ({ channels }) =>
+      mixer(
+        edit((s) =>
+          ops.setMixer(s, {
+            channels: channels.map(({ effects, ...levels }) => ({
+              ...levels,
+              effects: effects?.map(({ type, on, ...params }) => ({ type, on, params })),
+            })),
+          }),
+        ),
+      ),
+    { grid: false },
   );
 
   tool(

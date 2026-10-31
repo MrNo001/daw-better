@@ -1,5 +1,6 @@
 import { PITCH_RANGE, noteName, parsePitch } from '../shared/synths.js';
 import { BEATS_PER_BAR, barLabel, lengthLabel } from '../shared/patterns.js';
+import { defaultChannel, describeEffect, formatDb, formatPan, mixerChannels } from '../shared/mixer.js';
 
 // Text notation used by the MCP tools: one character per step.
 //   X = accent (1.0)   x = hit (0.8)   o = ghost note (0.45)   . or - = rest   1-9 = velocity n/9
@@ -140,5 +141,29 @@ export function formatSong(state) {
     const clips = state.arrangement.filter((c) => c.lane === lane);
     lines.push(`- lane ${lane + 1}: ${clips.map((c) => `"${names.get(c.pattern)}" at ${barLabel(c.start)} for ${lengthLabel(c.length)}`).join('; ')}`);
   }
+  return lines.join('\n');
+}
+
+// The mixer, channel by channel. Channels nobody has touched are listed together at the end.
+export function formatMixer(state) {
+  const channels = mixerChannels(state);
+  const settings = (id) => state.mixer.channels[id] ?? defaultChannel();
+  const soloed = channels.filter((c) => settings(c.id).solo).map((c) => c.id);
+  const effects = (list) => (list.length ? list.map(describeEffect).join(' → ') : 'no effects');
+  const lines = ['Mixer, shared by every pattern (faders in dB, 0 dB leaves the level as it is; effects run left to right):'];
+  if (soloed.length) lines.push(`- SOLO: only ${soloed.join(', ')} can be heard`);
+  const untouched = [];
+  for (const c of channels) {
+    const s = settings(c.id);
+    const info = [];
+    if (s.mute) info.push('MUTED');
+    if (s.solo) info.push('SOLO');
+    if (s.volume !== 0 || s.pan !== 0 || s.effects.length) info.push(formatDb(s.volume), formatPan(s.pan), effects(s.effects));
+    const label = `${c.id}${c.name.toLowerCase() === c.id.replace(/_/g, ' ') ? '' : ` ("${c.name}")`}${c.here ? '' : ', not in this pattern'}`;
+    if (info.length) lines.push(`- ${label}: ${info.join(', ')}`);
+    else untouched.push(c.id);
+  }
+  if (untouched.length) lines.push(`- at 0 dB, centered, no effects: ${untouched.join(', ')}`);
+  lines.push(`- master: ${formatDb(state.mixer.master.volume)}, ${effects(state.mixer.master.effects)}`);
   return lines.join('\n');
 }

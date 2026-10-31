@@ -1,9 +1,11 @@
 // Drum synth and step scheduler built on the Web Audio API. Every sound is synthesized,
 // so there are no samples to load. Scheduling uses the look-ahead pattern: a timer wakes
 // up often and books the notes due in the next ~120ms on the audio clock, which keeps
-// timing tight even when the main thread is busy.
+// timing tight even when the main thread is busy. Each track plays into its channel of the
+// mixer (effects.js), with its effects, fader and panning.
 
 import { BEATS_PER_BAR } from '/shared/patterns.js';
+import { Mixer } from './effects.js';
 
 const LOOKAHEAD = 0.12;
 const TICK_MS = 25;
@@ -85,12 +87,15 @@ export class DrumEngine {
   async unlock() {
     if (!this.ctx) {
       const ctx = new AudioContext({ latencyHint: 'interactive' });
+      // The mixer's master channel goes through a gentle compressor that keeps peaks in check.
       const compressor = ctx.createDynamicsCompressor();
       compressor.threshold.value = -12;
       compressor.ratio.value = 4;
-      this.master = ctx.createGain();
-      this.master.gain.value = 0.8;
-      this.master.connect(compressor).connect(ctx.destination);
+      const output = ctx.createGain();
+      output.gain.value = 0.8;
+      output.connect(compressor).connect(ctx.destination);
+      this.mixer = new Mixer(ctx, output);
+      this.out = this.mixer.master.input;
       this.noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       const data = this.noiseBuffer.getChannelData(0);
       for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
@@ -112,6 +117,16 @@ export class DrumEngine {
     this.schedule();
     this.ticker.start();
     this.raf = requestAnimationFrame(this.draw);
+  }
+
+  /** Apply the mixer's settings: levels, panning, mute and solo, and the effects. */
+  applyMixer(state) {
+    this.mixer?.sync(state);
+  }
+
+  /** Meter readings for the Mixer window (see Mixer.levels), or null before audio is on. */
+  levels() {
+    return this.mixer?.levels() ?? null;
   }
 
   stop() {
@@ -166,13 +181,15 @@ export class DrumEngine {
     const audible = (t) => !t.mute && (!anySolo || t.solo);
     for (const t of pattern.tracks) {
       const v = t.steps[i];
-      if (v > 0 && audible(t)) this.trigger(t.instrument, at, v * t.volume);
+      if (v > 0 && audible(t)) this.trigger(t.instrument, at, v * t.volume, t.id);
     }
     for (const synth of pattern.synths) {
       if (!audible(synth)) continue;
       for (const n of synth.notes) {
         // A note that runs past the end of the clip stops with it.
-        if (n.start === i) this.playNote(synth.preset, n.pitch, at, Math.min(n.length, (end - tick) / perStep) * stepDur, n.velocity * synth.volume);
+        if (n.start === i) {
+          this.playNote(synth.preset, n.pitch, at, Math.min(n.length, (end - tick) / perStep) * stepDur, n.velocity * synth.volume, synth.id);
+        }
       }
     }
   }
@@ -189,14 +206,18 @@ export class DrumEngine {
     if (this.running) this.raf = requestAnimationFrame(this.draw);
   };
 
-  trigger(instrument, time = this.ctx?.currentTime, velocity = 0.8) {
+  // A drum hit, played into the mixer channel `channel` (a track id). Voices connect to
+  // `this.out`, which points at that channel while they're built.
+  trigger(instrument, time = this.ctx?.currentTime, velocity = 0.8, channel) {
     if (!this.ctx || velocity <= 0) return;
     const voice = VOICES[instrument];
-    if (voice) voice(this, Math.max(time, this.ctx.currentTime), velocity);
+    if (!voice) return;
+    this.out = this.mixer.input(channel);
+    voice(this, Math.max(time, this.ctx.currentTime), velocity);
   }
 
   // One synth note: oscillators -> low-pass filter with its own envelope -> amp envelope.
-  playNote(preset, midi, time = this.ctx?.currentTime, duration = 0.3, velocity = 0.8) {
+  playNote(preset, midi, time = this.ctx?.currentTime, duration = 0.3, velocity = 0.8, channel) {
     const p = SYNTH_PRESETS[preset];
     if (!this.ctx || !p || velocity <= 0) return;
     const ctx = this.ctx;
@@ -211,7 +232,7 @@ export class DrumEngine {
     amp.gain.linearRampToValueAtTime(peak, t + attack);
     amp.gain.setTargetAtTime(peak * sustain, t + attack, decay / 3);
     amp.gain.setTargetAtTime(0, end, release / 3);
-    amp.connect(this.master);
+    amp.connect(this.mixer.input(channel));
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -231,7 +252,7 @@ export class DrumEngine {
 
   // --- building blocks -------------------------------------------------------
 
-  envelope(time, peak, decay, destination = this.master) {
+  envelope(time, peak, decay, destination = this.out) {
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0.0001, time);
     gain.gain.exponentialRampToValueAtTime(Math.max(peak, 0.0002), time + 0.002);
@@ -357,7 +378,7 @@ const VOICES = {
     }
     g.setValueAtTime(v * 0.6, t + 0.033);
     g.exponentialRampToValueAtTime(0.0001, t + 0.22);
-    gain.connect(e.master);
+    gain.connect(e.out);
     e.noise(t, 0.25, e.filter('bandpass', 1100, gain, 0.8));
   },
 
@@ -387,7 +408,7 @@ const VOICES = {
     gain.gain.exponentialRampToValueAtTime(v * 0.3, t + 0.002);
     gain.gain.exponentialRampToValueAtTime(v * 0.08, t + 0.06);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
-    gain.connect(e.master);
+    gain.connect(e.out);
     const bp = e.filter('bandpass', 1400, gain, 0.7);
     e.osc('square', 540, t, 0.4, bp);
     e.osc('square', 800, t, 0.4, bp);

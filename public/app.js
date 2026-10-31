@@ -10,6 +10,7 @@ import { initWindows } from './windows.js';
 import { createPianoRoll } from './pianoroll.js';
 import { createBrowser } from './browser.js';
 import { createPlaylist } from './playlist.js';
+import { createMixer } from './mixer.js';
 
 const VELOCITY = { normal: 0.8, accent: 1, ghost: 0.45 };
 const SUBDIVISIONS = { 1: 'quarters', 2: '8ths', 3: 'triplets', 4: '16ths', 5: 'quintuplets', 6: '16th triplets', 7: 'septuplets', 8: '32nds' };
@@ -64,6 +65,8 @@ const reportAudio = () => send({ type: 'audio', ready: engine.ready });
 function setConnected(on) {
   $('conn-dot').classList.toggle('on', on);
   $('conn-text').textContent = on ? 'Connected' : 'Reconnecting…';
+  $('conn').classList.toggle('online', on);
+  $('conn').title = on ? 'Connected to the daw-better server' : 'Lost the connection to the daw-better server; trying again';
 }
 
 // The server's state, with the current pattern's fields copied to the top level (tracks,
@@ -72,6 +75,7 @@ function view(shared) {
   // A server started before there were several patterns sends one pattern's fields.
   shared.patterns ??= [{ ...shared, id: 'p1', name: 'Pattern 1', color: 0, synths: shared.synths ?? [] }];
   shared.arrangement ??= [];
+  shared.mixer ??= { channels: {}, master: { volume: 0, effects: [] } };
   const pattern = shared.patterns.find((p) => p.id === shared.current) ?? shared.patterns[0];
   const { tracks, synths, length, stepsPerBeat, swing, loop } = pattern;
   return { ...shared, current: pattern.id, pattern, tracks, synths, length, stepsPerBeat, swing, loop };
@@ -85,6 +89,8 @@ function applySync(msg) {
   renderGrid(previous, msg.source);
   pianoRoll.render(previous, msg.source);
   playlist.render();
+  mixer.render(previous, msg.source);
+  engine.applyMixer(state);
   renderPatternControls();
   browser.sync(previous);
   renderTransport();
@@ -105,6 +111,7 @@ async function unlockAudio() {
     console.warn('Could not start audio', err);
   }
   reportAudio();
+  if (state) engine.applyMixer(state);
   syncPlayback();
 }
 
@@ -124,7 +131,8 @@ function renderAudioChip() {
   const urgent = !engine.ready && !!state?.playing;
   chip.hidden = engine.ready;
   chip.classList.toggle('urgent', urgent);
-  chip.textContent = urgent ? 'Playing, but audio is off. Click to hear it' : 'Audio off. Click to enable';
+  chip.textContent = urgent ? 'Playing, but audio is off. Click to hear it' : 'Enable audio';
+  chip.title = 'Browsers only play sound once you click the page';
 }
 
 const isAudible = (track, anySolo) => !track.mute && (!anySolo || track.solo);
@@ -158,7 +166,7 @@ engine.onTick = (tick) => {
 };
 
 function audition(track, velocity = VELOCITY.normal) {
-  engine.trigger(track.instrument, undefined, velocity * track.volume);
+  engine.trigger(track.instrument, undefined, velocity * track.volume, track.id);
 }
 
 // --- grid --------------------------------------------------------------------
@@ -308,6 +316,7 @@ grid.addEventListener('pointerdown', (e) => {
   if (name && e.button === 0) {
     audition(trackOf(name));
     flash(name, 'pressed');
+    mixer.select(trackOf(name).id);
     return;
   }
 
@@ -469,6 +478,7 @@ $('add-track').addEventListener('change', (e) => {
   e.target.value = '';
 });
 $('note-close').addEventListener('click', () => act('setNote', { body: '' }));
+for (const button of document.querySelectorAll('[data-show]')) button.addEventListener('click', () => windows.show(button.dataset.show));
 
 addEventListener('pointerdown', unlockAudio, true);
 addEventListener('keydown', (e) => {
@@ -613,8 +623,10 @@ const windows = initWindows($('workspace'), {
     const sequencer = $('win-sequencer');
     return { x: 260, y: Math.min(sequencer.offsetTop + sequencer.offsetHeight + 12, workspace.clientHeight - 200) };
   },
-  // Along the bottom, over the lower part of the piano roll on smaller screens.
+  // Along the bottom, over the lower part of the piano roll on smaller screens. The mixer
+  // starts over the playlist; the buttons in the toolbar bring either one to the front.
   playlist: (workspace, win) => ({ x: 260, y: Math.max(16, workspace.clientHeight - win.offsetHeight - 16) }),
+  mixer: (workspace, win) => ({ x: 260, y: Math.max(16, workspace.clientHeight - win.offsetHeight - 16) }),
   claude: (workspace, win) => ({ x: workspace.clientWidth - win.offsetWidth - 16, y: 16 }),
 });
 
@@ -623,8 +635,9 @@ setInterval(() => {
   renderClaudeStatus();
 }, 15_000);
 
-const pianoRoll = createPianoRoll({ engine, act, getState: () => state });
+const pianoRoll = createPianoRoll({ engine, act, getState: () => state, onSelect: (id) => mixer.select(id) });
 const playlist = createPlaylist({ act, getState: () => state, toast });
+const mixer = createMixer({ engine, act, getState: () => state });
 const browser = createBrowser({ act, getState: () => state, toast, sequencerWindow: $('win-sequencer') });
 
 renderAudioChip();

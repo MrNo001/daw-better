@@ -124,7 +124,19 @@ export function initWindows(workspace, defaults = {}) {
   addEventListener('resize', () => {
     if (floating.matches) for (const win of windows) move(win, win.offsetLeft, win.offsetTop);
   });
+  // Bring a window to the front, expanded; on narrow screens, scroll to it.
+  function show(name) {
+    const win = windows.find((w) => w.dataset.window === name);
+    if (!win) return;
+    if (win.classList.contains('collapsed')) {
+      setCollapsed(win, false);
+      remember(win);
+    }
+    focus(win);
+    if (!floating.matches) win.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   // Windows the user hasn't moved go back to their default spot; call this once the
   // content that the defaults depend on (like the sequencer's height) has rendered.
-  return { refresh: place };
+  return { refresh: place, show };
 }

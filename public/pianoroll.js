@@ -41,7 +41,7 @@ function laneBackground(stepsPerBeat) {
   ].join(', ');
 }
 
-export function createPianoRoll({ engine, act, getState }) {
+export function createPianoRoll({ engine, act, getState, onSelect }) {
   const $ = (id) => document.getElementById(id);
   const scroll = $('roll-scroll');
   const lanes = $('roll-lanes');
@@ -93,7 +93,7 @@ export function createPianoRoll({ engine, act, getState }) {
 
   function preview(pitch, velocity = VELOCITY.normal) {
     const synth = selected();
-    if (synth) engine.playNote(synth.preset, pitch, undefined, 0.35, velocity * synth.volume);
+    if (synth) engine.playNote(synth.preset, pitch, undefined, 0.35, velocity * synth.volume, synth.id);
   }
 
   // --- rendering -----------------------------------------------------------------
@@ -342,6 +342,7 @@ export function createPianoRoll({ engine, act, getState }) {
     if (e.target.closest('.tab-rm')) return act('removeTrack', { track: tab.dataset.id });
     selectedId = tab.dataset.id;
     render();
+    onSelect?.(selectedId);
   });
 
   $('add-synth').addEventListener('change', (e) => {

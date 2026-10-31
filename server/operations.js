@@ -7,11 +7,28 @@
 // subdivision and swing; a note's start and length are measured in the same steps as the
 // drums. The sequencer and piano roll show the current pattern (state.current), and the track
 // and note edits below apply to it. The arrangement places patterns on the song timeline as
-// clips, with positions in beats. The tempo is shared by everything.
+// clips, with positions in beats. The tempo is shared by everything, and so is the mixer
+// (state.mixer, see shared/mixer.js), which has a channel per track id across the patterns.
 
 import { INSTRUMENTS, DEFAULT_KIT, normalizeName, resolveInstrument } from '../shared/instruments.js';
 import { SYNTHS, PITCH_RANGE, noteName, parsePitch, resolveSynth } from '../shared/synths.js';
 import { BEATS_PER_BAR, PATTERN_COLORS, patternBeats, barLabel, lengthLabel } from '../shared/patterns.js';
+import {
+  EFFECTS,
+  MAX_EFFECTS,
+  VOLUME_RANGE,
+  PAN_RANGE,
+  defaultChannel,
+  defaultMaster,
+  effectType,
+  effectList,
+  defaultParams,
+  checkParam,
+  formatParam,
+  formatDb,
+  formatPan,
+  mixerChannels,
+} from '../shared/mixer.js';
 import { parseSteps } from './notation.js';
 
 export const LIMITS = {
@@ -278,7 +295,16 @@ function sortClips(state) {
 // --- state ---------------------------------------------------------------------
 
 export function defaultState() {
-  const state = { bpm: 100, playing: false, mode: 'pattern', patterns: [], current: null, arrangement: [], note: null };
+  const state = {
+    bpm: 100,
+    playing: false,
+    mode: 'pattern',
+    patterns: [],
+    current: null,
+    arrangement: [],
+    mixer: { channels: {}, master: defaultMaster() },
+    note: null,
+  };
   const pattern = pushPattern(state);
   state.current = pattern.id;
   for (const id of DEFAULT_KIT) pushTrack(pattern, id);
@@ -306,7 +332,8 @@ export function defaultState() {
       'and a closed hi-hat on every 8th note, with a simple bass line in the **Piano Roll**.\n\n' +
       'Press **Space** to play. Click cells to edit, pick a genre loop in the **Browser**, ' +
       'or ask Claude to write a groove, explain one, or quiz you. To build a song, make more ' +
-      'patterns with **+**, place them in the **Playlist** and switch to **Song**.',
+      'patterns with **+**, place them in the **Playlist** and switch to **Song**. The **Mixer** ' +
+      'sets levels and adds effects like reverb.',
     highlights: [{ track: 'snare', steps: [4, 12] }],
     pattern: pattern.id,
   };
@@ -365,6 +392,43 @@ function sanitizePattern(raw) {
   return pattern;
 }
 
+// A saved mixer keeps the channels whose tracks still exist and that differ from the
+// defaults. Effect ids are unique across the whole mixer.
+function sanitizeMixer(raw, state) {
+  const tracks = new Set(state.patterns.flatMap((p) => [...p.tracks, ...p.synths].map((t) => t.id)));
+  const ids = new Set();
+  const effect = (e) => {
+    const type = effectType(e?.type);
+    if (!type) return [];
+    const params = defaultParams(type.id);
+    for (const p of type.params) {
+      try {
+        if (e.params?.[p.id] !== undefined) params[p.id] = checkParam(p, e.params[p.id]);
+      } catch {
+        // Keep the default for a setting that isn't valid.
+      }
+    }
+    const id = validId(e.id) && !ids.has(e.id) ? e.id : newId('fx');
+    ids.add(id);
+    return [{ id, type: type.id, on: e.on !== false, params }];
+  };
+  const channel = (c, base) => {
+    const clean = base();
+    if (!c || typeof c !== 'object') return clean;
+    if (Number.isFinite(c.volume)) clean.volume = clamp(c.volume, VOLUME_RANGE);
+    if ('pan' in clean) Object.assign(clean, { pan: Number.isFinite(c.pan) ? Math.round(clamp(c.pan, PAN_RANGE)) : 0, mute: !!c.mute, solo: !!c.solo });
+    clean.effects = (Array.isArray(c.effects) ? c.effects : []).flatMap(effect).slice(0, MAX_EFFECTS);
+    return clean;
+  };
+  const mixer = { channels: {}, master: channel(raw?.master, defaultMaster) };
+  for (const [id, c] of Object.entries(raw?.channels ?? {})) {
+    if (!tracks.has(id)) continue;
+    const clean = channel(c, defaultChannel);
+    if (JSON.stringify(clean) !== JSON.stringify(defaultChannel())) mixer.channels[id] = clean;
+  }
+  return mixer;
+}
+
 // Rebuild a state loaded from disk, keeping only valid fields.
 export function sanitize(raw) {
   const state = defaultState();
@@ -397,6 +461,7 @@ export function sanitize(raw) {
     sortClips(state);
   }
   state.arrangement = state.arrangement.filter((c) => state.patterns.some((p) => p.id === c.pattern));
+  state.mixer = sanitizeMixer(raw.mixer, state);
 
   const note = raw.note;
   state.note =
@@ -746,4 +811,176 @@ export function setNote(state, { title, body, highlights }) {
     pattern: pattern.id,
   };
   return `note: ${state.note.title || state.note.body.slice(0, 48)}`;
+}
+
+// --- mixer ---------------------------------------------------------------------
+
+/**
+ * A mixer channel by track id or name in any pattern, by a drum or synth sound in the current
+ * pattern ("hh", "bass"), or "master".
+ */
+function findChannel(state, ref) {
+  const key = normalizeName(ref ?? '');
+  if (key === 'master') return { id: 'master', name: 'Master', master: true };
+  const channels = mixerChannels(state);
+  const match = channels.find((c) => c.id === key) ?? channels.find((c) => normalizeName(c.name) === key);
+  if (match) return match;
+  const pattern = currentPattern(state);
+  const track = findTrack(pattern, ref) ?? findSynth(pattern, ref);
+  if (track) return channels.find((c) => c.id === track.id);
+  throw new Error(`There is no mixer channel "${ref}". Channels: ${[...channels.map((c) => c.id), 'master'].join(', ')}.`);
+}
+
+// A channel's settings. Channels nobody has changed aren't stored, so the first change adds them.
+const settingsOf = (state, channel) => (channel.master ? state.mixer.master : (state.mixer.channels[channel.id] ??= defaultChannel()));
+
+// A channel put back to the defaults is dropped again.
+function dropDefaults(state) {
+  const plain = JSON.stringify(defaultChannel());
+  for (const [id, settings] of Object.entries(state.mixer.channels)) if (JSON.stringify(settings) === plain) delete state.mixer.channels[id];
+}
+
+/** An effect type by id, name or short name: "reverb", "Compressor", "comp". */
+function findEffectType(ref) {
+  const key = String(ref ?? '').trim().toLowerCase();
+  const type = EFFECTS.find((e) => e.id === key || e.name.toLowerCase() === key || e.short.toLowerCase() === key);
+  if (!type) throw new Error(`There is no effect "${ref}". Effects: ${effectList()}.`);
+  return type;
+}
+
+/** An effect on a channel by id, by type ("reverb": the first one) or by position from 1. */
+function findEffect(settings, channel, ref) {
+  const key = String(ref ?? '').trim().toLowerCase();
+  const effect =
+    settings.effects.find((e) => e.id === ref) ??
+    settings.effects.find((e) => e.type === key || effectType(e.type).name.toLowerCase() === key) ??
+    (/^\d+$/.test(key) ? settings.effects[Number(key) - 1] : undefined);
+  if (!effect) {
+    const list = settings.effects.map((e, i) => `${i + 1}. ${effectType(e.type).name}`).join(', ');
+    throw new Error(`${channel.name} has no effect "${ref}". ${list ? `Its effects: ${list}.` : 'It has no effects.'}`);
+  }
+  return effect;
+}
+
+function checkParams(type, params) {
+  const checked = {};
+  for (const [key, value] of Object.entries(params ?? {})) {
+    const param = type.params.find((p) => p.id === key);
+    if (!param) throw new Error(`${type.name} has no setting "${key}". Its settings: ${type.params.map((p) => p.id).join(', ')}.`);
+    checked[key] = checkParam(param, value);
+  }
+  return checked;
+}
+
+const newEffect = (type) => ({ id: newId('fx'), type: type.id, on: true, params: defaultParams(type.id) });
+const chainText = (effects) => effects.map((e) => `${effectType(e.type).name}${e.on ? '' : ' (off)'}`).join(' → ') || 'no effects';
+
+// Fader, pan, mute and solo; the master channel has only a fader.
+function applyLevels(channel, settings, { volume, pan, mute, solo }) {
+  const changes = [];
+  if (volume !== undefined) {
+    settings.volume = Math.round(clamp(toNumber(volume, 'volume'), VOLUME_RANGE) * 10) / 10;
+    changes.push(formatDb(settings.volume));
+  }
+  if (channel.master) {
+    if ([pan, mute, solo].some((v) => v !== undefined)) throw new Error('The master channel has a fader and effects, but no pan, mute or solo.');
+    return changes;
+  }
+  if (pan !== undefined) {
+    settings.pan = Math.round(clamp(toNumber(pan, 'pan'), PAN_RANGE));
+    changes.push(`panned ${formatPan(settings.pan)}`);
+  }
+  if (mute !== undefined) {
+    settings.mute = !!mute;
+    changes.push(settings.mute ? 'muted' : 'unmuted');
+  }
+  if (solo !== undefined) {
+    settings.solo = !!solo;
+    changes.push(settings.solo ? 'solo on' : 'solo off');
+  }
+  return changes;
+}
+
+export function setChannel(state, { channel: ref, ...levels }) {
+  const channel = findChannel(state, ref);
+  const changes = applyLevels(channel, settingsOf(state, channel), levels);
+  if (changes.length === 0) throw new Error('Nothing to change.');
+  dropDefaults(state);
+  return `mixer ${channel.name}: ${changes.join(', ')}`;
+}
+
+export function addEffect(state, { channel: ref, type: typeRef, params, index }) {
+  const channel = findChannel(state, ref);
+  const settings = settingsOf(state, channel);
+  if (settings.effects.length >= MAX_EFFECTS) throw new Error(`A channel holds at most ${MAX_EFFECTS} effects.`);
+  const type = findEffectType(typeRef);
+  const effect = newEffect(type);
+  Object.assign(effect.params, checkParams(type, params));
+  settings.effects.splice(Number.isInteger(index) ? clamp(index, [0, settings.effects.length]) : settings.effects.length, 0, effect);
+  return `added ${type.name} to ${channel.name}`;
+}
+
+export function updateEffect(state, { channel: ref, effect: effectRef, params, on }) {
+  const channel = findChannel(state, ref);
+  const effect = findEffect(settingsOf(state, channel), channel, effectRef);
+  const type = effectType(effect.type);
+  const checked = checkParams(type, params);
+  Object.assign(effect.params, checked);
+  const changes = Object.entries(checked).map(([key, value]) => `${key} ${formatParam(type.params.find((p) => p.id === key), value)}`);
+  if (on !== undefined) {
+    effect.on = !!on;
+    changes.push(effect.on ? 'on' : 'off');
+  }
+  if (changes.length === 0) throw new Error('Nothing to change.');
+  return `${channel.name} ${type.name}: ${changes.join(', ')}`;
+}
+
+export function removeEffect(state, { channel: ref, effect: effectRef }) {
+  const channel = findChannel(state, ref);
+  const settings = settingsOf(state, channel);
+  const effect = findEffect(settings, channel, effectRef);
+  settings.effects.splice(settings.effects.indexOf(effect), 1);
+  dropDefaults(state);
+  return `removed ${effectType(effect.type).name} from ${channel.name}`;
+}
+
+// Effects run top to bottom, so their order changes the sound: drive before reverb distorts
+// the dry sound, reverb before drive distorts the room too.
+export function moveEffect(state, { channel: ref, effect: effectRef, index }) {
+  const channel = findChannel(state, ref);
+  const settings = settingsOf(state, channel);
+  const effect = findEffect(settings, channel, effectRef);
+  if (!Number.isInteger(index)) throw new Error('Give the new position.');
+  settings.effects.splice(settings.effects.indexOf(effect), 1);
+  settings.effects.splice(clamp(index, [0, settings.effects.length]), 0, effect);
+  return `${channel.name} effects: ${chainText(settings.effects)}`;
+}
+
+// Claude's set_mixer: several channels in one undo step. A channel's `effects`, when given,
+// become its whole chain, in order; an effect of the same type that's already on the channel
+// keeps the settings that aren't given, so a tweak only has to name what changes.
+export function setMixer(state, { channels }) {
+  if (!Array.isArray(channels) || channels.length === 0) throw new Error('Give at least one channel.');
+  const done = channels.map(({ channel: ref, effects, ...levels }) => {
+    const channel = findChannel(state, ref);
+    const settings = settingsOf(state, channel);
+    const changes = applyLevels(channel, settings, levels);
+    if (effects !== undefined) {
+      if (effects.length > MAX_EFFECTS) throw new Error(`A channel holds at most ${MAX_EFFECTS} effects.`);
+      const before = [...settings.effects];
+      settings.effects = effects.map(({ type: typeRef, on, params }) => {
+        const type = findEffectType(typeRef);
+        const i = before.findIndex((e) => e.type === type.id);
+        const effect = i >= 0 ? before.splice(i, 1)[0] : newEffect(type);
+        Object.assign(effect.params, checkParams(type, params));
+        if (on !== undefined) effect.on = !!on;
+        return effect;
+      });
+      changes.push(chainText(settings.effects));
+    }
+    if (changes.length === 0) throw new Error(`Nothing to change on ${channel.name}.`);
+    return `${channel.name}: ${changes.join(', ')}`;
+  });
+  dropDefaults(state);
+  return `mixer ${done.join('; ')}`;
 }

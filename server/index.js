@@ -141,6 +141,11 @@ const UI_ACTIONS = {
   addClip: ops.addClip,
   updateClip: ops.updateClip,
   deleteClips: ops.deleteClips,
+  setChannel: ops.setChannel,
+  addEffect: ops.addEffect,
+  updateEffect: ops.updateEffect,
+  removeEffect: ops.removeEffect,
+  moveEffect: ops.moveEffect,
 };
 
 // A loop dropped on the Playlist becomes a new pattern with a clip where it was dropped.

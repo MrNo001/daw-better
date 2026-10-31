@@ -58,9 +58,16 @@
         <button id="clear" class="tool-btn text" title="Clear every drum step and every note">Clear</button>
       </div>
 
+      <div class="window-switch" role="group" aria-label="Bring a window to the front">
+        <button class="tool-btn" data-show="sequencer" title="Drum Sequencer" aria-label="Show the Drum Sequencer"><span class="title-icon"></span></button>
+        <button class="tool-btn" data-show="roll" title="Piano Roll" aria-label="Show the Piano Roll"><span class="roll-icon"></span></button>
+        <button class="tool-btn" data-show="playlist" title="Playlist" aria-label="Show the Playlist"><span class="playlist-icon"></span></button>
+        <button class="tool-btn" data-show="mixer" title="Mixer" aria-label="Show the Mixer"><span class="mixer-icon"></span></button>
+      </div>
+
       <div class="toolbar-right">
         <button id="audio-chip" class="chip warn" hidden></button>
-        <span class="chip" title="Connection to the daw-better server">
+        <span id="conn" class="chip conn" title="Connection to the daw-better server">
           <span id="conn-dot" class="dot"></span><span id="conn-text">Connecting…</span>
         </span>
       </div>
@@ -168,6 +175,33 @@
           <p class="hint playlist-hint">
             Drag a pattern onto a lane, or click a lane · drag a clip to move it, its end to repeat it · click it to
             edit its pattern · <b>right</b>-click deletes
+          </p>
+        </div>
+      </section>
+
+      <section id="win-mixer" class="window mixer-window resizable" data-window="mixer" aria-labelledby="mixer-title">
+        <header class="titlebar">
+          <span class="mixer-icon" aria-hidden="true"></span>
+          <h2 id="mixer-title" class="title">Mixer</h2>
+          <span id="mixer-meta" class="title-meta"></span>
+          <button class="win-btn" data-collapse title="Collapse (or double-click the title bar)">–</button>
+        </header>
+        <div class="window-body mixer-body">
+          <div class="mixer-main">
+            <div id="mixer-strips" class="mixer-strips" aria-label="Mixer channels"></div>
+            <section id="fx-panel" class="fx-panel" aria-labelledby="fx-title">
+              <div class="fx-toolbar">
+                <h3 id="fx-title" class="fx-title"></h3>
+                <select id="fx-add" aria-label="Add an effect">
+                  <option value="">+ Effect</option>
+                </select>
+              </div>
+              <div id="fx-list" class="fx-list"></div>
+            </section>
+          </div>
+          <p class="hint mixer-hint">
+            Click a channel to see its effects, which run top to bottom · drag a fader or knob, double-click to reset ·
+            every pattern's tracks share these channels
           </p>
         </div>
       </section>

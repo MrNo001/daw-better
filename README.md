@@ -1,6 +1,6 @@
 # daw-better
 
-A self-hosted drum sequencer, piano roll and playlist for experimenting with music and teaching it, with Claude connected over MCP. You and Claude edit the same song: anything Claude writes appears on screen right away and is heard live while it plays, and Claude can read back what you changed by hand.
+A self-hosted drum sequencer, piano roll, playlist and mixer for experimenting with music and teaching it, with Claude connected over MCP. You and Claude edit the same song: anything Claude writes appears on screen right away and is heard live while it plays, and Claude can read back what you changed by hand.
 
 This is the start of a larger DAW project built around experimenting with music and learning it with AI.
 
@@ -43,17 +43,19 @@ Things to try:
 - "Quiz me: write a famous drum pattern and let me guess it."
 - "Build up a funk groove with me and save each stage in a folder called Funk Lesson."
 - "Write an intro, a verse and a chorus as separate patterns, then arrange them into a song."
+- "Make the snare sound like an 80s snare."
+- "Give the bass some grit, and tell me what to listen for."
 
 ## Using the sequencer
 
 - Left-click a step to toggle it, or left-drag to paint steps on. Right-click erases a step, and right-drag erases everything it passes over. One drag is one undo step.
 - <kbd>Shift</kbd>-click for an accent, <kbd>Alt</kbd>-click for a ghost note.
-- Press a track's name button to hear its sound. The green light mutes the track, **S** solos it, and the knob sets its volume (drag up or down, double-click to reset).
+- Press a track's name button to hear its sound and show its channel in the Mixer. The green light mutes the track, **S** solos it, and the knob sets its volume (drag up or down, double-click to reset).
 - <kbd>Space</kbd> plays and stops. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redoes.
 - **Tempo** and **Steps** in the display: drag up or down to change them, or click to type.
 - **Grid** sets the subdivision: 16ths, 8ths, triplets, and so on. The counting row above the steps follows it ("1 e + a").
 - **Swing** runs from 50% (straight) to 75%. 66% is a triplet shuffle.
-- The sequencer, Piano Roll, Playlist, Browser and Claude panels are windows. Drag them by the title bar, and double-click a title bar to collapse it. Resize the Piano Roll and the Playlist from the bottom-right corner. This browser remembers where you put them. On narrow screens they stack.
+- The sequencer, Piano Roll, Playlist, Mixer, Browser and Claude panels are windows. Drag them by the title bar, and double-click a title bar to collapse it. The four buttons after **Clear** in the toolbar bring the sequencer, Piano Roll, Playlist or Mixer to the front. Resize the Piano Roll, the Playlist and the Mixer from the bottom-right corner. This browser remembers where you put them. On narrow screens they stack.
 
 ## Piano roll
 
@@ -80,6 +82,28 @@ The Playlist lays the song out in bars, on up to 16 lanes:
 - Click a clip to open its pattern in the sequencer and Piano Roll. Right-click deletes a clip, and right-drag deletes every clip it passes over.
 
 The patterns and the arrangement are saved to `data/state.json` and restored when the server restarts. A save from before patterns existed loads as a single pattern placed at bar 1. Set `DATA_FILE` to save somewhere else, for example to run separate instances side by side with different `PORT`s.
+
+## Mixer
+
+The Mixer has a channel strip for every drum and synth track, and every channel then runs through **Master**. A channel belongs to the track, not the pattern: the Kick channel mixes the kick in every pattern that has it.
+
+- The fader sets the level: 0 dB leaves it as it is, and all the way down is silent. Drag it (hold <kbd>Shift</kbd> for fine moves), scroll it, or use the arrow keys; double-click puts it back at 0 dB. The meter beside it shows the level after the fader and lights red at the top when the sound clips.
+- The knob pans the sound left or right. The green light mutes the channel, and **S** solos it, so you hear only the soloed channels. These come after the track's own volume, mute and solo in the sequencer.
+- Click a strip to see its effects on the right. **+ Effect** adds one, the light on its card turns it off and on (bypass), ↑ and ↓ move it, and × removes it. A channel holds up to 8.
+
+Effects run top to bottom, and the order changes the sound: a drive before a reverb distorts only the dry sound, while after it the room gets distorted too.
+
+| Effect     | What it does                                                                      | Try it for                                        |
+| ---------- | --------------------------------------------------------------------------------- | ------------------------------------------------- |
+| EQ         | More or less bass (Low), body around Freq (Mid) and brightness (High)              | Less mud, more snap on a snare, more air on hats  |
+| Compressor | Turns down whatever goes over the Threshold, by the Ratio, so the level is more even. The Reduction bar shows how much | Punchier drums, a steadier bass |
+| Drive      | Warm saturation, fuzz, or lo-fi bit crushing                                       | Grit on a bass, a crunchy beat                    |
+| Filter     | Low-pass keeps what's below the Cutoff (darker), high-pass what's above (thinner), band-pass a band; Resonance adds a peak | A muffled or telephone sound, a thin intro |
+| Delay      | Echoes in time with the tempo, in the middle or bouncing left and right (ping-pong) | Space on a lead, a dub snare                      |
+| Reverb     | The room around the sound, from a small room to a huge hall                        | Distance and space                                |
+| Chorus     | Slowly drifting copies that thicken and widen the sound                            | Wide keys and pads                                |
+
+The mixer is saved with the song. Saving a pattern to the library keeps its notes and steps, but not the mixer.
 
 ## Loop library
 
@@ -130,6 +154,7 @@ Each folder's `.order.json` remembers the order its loops were arranged in, and 
 | `set_notes`     | Write notes and chords on a synth track (piano roll)               |
 | `set_transport` | Tempo, swing, length, subdivision, pattern or song mode, play and stop |
 | `set_track`     | Volume, mute, solo, name, sound (drum or synth track)              |
+| `set_mixer`     | Mixer channels: fader, panning, mute, solo and the effect chain (one undo step) |
 | `add_track` / `remove_track` / `clear` | Arrange drum and synth tracks               |
 | `show_note`     | Show an explanation beside the grid and highlight steps            |
 | `undo`          | Undo recent changes, by either of you                              |
@@ -148,9 +173,10 @@ Notes are given as a pitch name (`"C4"` is middle C, `"F#2"`, `"Bb3"`), a start 
 - [server/operations.js](server/operations.js) contains every edit. The browser and Claude go through the same functions, so they can't drift apart.
 - [server/library.js](server/library.js) reads and writes the loop library on disk. The Browser reaches it under `/api/library`, and Claude through the library tools.
 - [server/mcp.js](server/mcp.js) defines the MCP tools and the instructions Claude receives when it connects. It runs in stateless Streamable HTTP mode.
-- [shared/synths.js](shared/synths.js) lists the synth sounds and converts between note names and MIDI numbers, and [shared/patterns.js](shared/patterns.js) holds the bar and pattern-length helpers, for both the server and the browser.
-- [public/pianoroll.js](public/pianoroll.js) is the Piano Roll window, [public/playlist.js](public/playlist.js) the Playlist, and [public/browser.js](public/browser.js) the Browser.
-- [public/audio.js](public/audio.js) synthesizes every drum and synth sound, so there are no samples to load. A look-ahead scheduler plays the current pattern or the whole arrangement, keeps timing tight through tempo changes, and keeps playing in a background tab.
+- [shared/synths.js](shared/synths.js) lists the synth sounds and converts between note names and MIDI numbers, [shared/patterns.js](shared/patterns.js) holds the bar and pattern-length helpers, and [shared/mixer.js](shared/mixer.js) describes the effects and their settings, for both the server and the browser. Claude's `set_mixer` tool is built from the same list.
+- [public/pianoroll.js](public/pianoroll.js) is the Piano Roll window, [public/playlist.js](public/playlist.js) the Playlist, [public/mixer.js](public/mixer.js) the Mixer, and [public/browser.js](public/browser.js) the Browser.
+- [public/audio.js](public/audio.js) synthesizes every drum and synth sound, so there are no samples to load. A look-ahead scheduler plays the current pattern or the whole arrangement, keeps timing tight through tempo changes, and keeps playing in a background tab. Each track plays into its mixer channel.
+- [public/effects.js](public/effects.js) builds the mixer on the Web Audio API: per channel, the effects in order, then pan, fader and meter, all into the master channel.
 - [public/app.js](public/app.js) renders whatever state the server sends. Claude's edits briefly flash in the grid.
 - [public/windows.js](public/windows.js) and [public/knob.js](public/knob.js) provide the draggable windows and rotary knobs.
 

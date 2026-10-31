@@ -1,9 +1,10 @@
 // Rotary knob: drag up/down (hold Shift for fine control), scroll, or use the arrow keys.
-// Double-click resets to the default value.
+// Double-click resets to the default value. A bipolar knob (like pan) draws its arc from
+// the middle.
 
-export function createKnob({ min = 0, max = 1, step = 0, value = min, defaultValue = value, size = 'md', label, format = String, onInput }) {
+export function createKnob({ min = 0, max = 1, step = 0, value = min, defaultValue = value, size = 'md', bipolar = false, label, format = String, onInput }) {
   const el = document.createElement('div');
-  el.className = `knob knob-${size}`;
+  el.className = `knob knob-${size}${bipolar ? ' bipolar' : ''}`;
   el.tabIndex = 0;
   el.setAttribute('role', 'slider');
   el.setAttribute('aria-label', label);
