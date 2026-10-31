@@ -7,6 +7,7 @@ import { BEATS_PER_BAR, PATTERN_COLORS } from '/shared/patterns.js';
 import { DrumEngine, TICKS, currentStep } from './audio.js';
 import { createKnob } from './knob.js';
 import { initWindows } from './windows.js';
+import { byId, eachWindow, focusedView } from './views.js';
 import { createPianoRoll } from './pianoroll.js';
 import { createBrowser } from './browser.js';
 import { createPlaylist } from './playlist.js';
@@ -18,8 +19,10 @@ const SUBDIVISIONS = { 1: 'quarters', 2: '8ths', 3: 'triplets', 4: '16ths', 5: '
 const COUNTS = { 2: ['+'], 3: ['+', 'a'], 4: ['e', '+', 'a'] };
 const instruments = Object.fromEntries(INSTRUMENTS.map((i) => [i.id, i]));
 
-const $ = (id) => document.getElementById(id);
+// Windows can be popped out (windows.js), so elements are looked up in every window.
+const $ = byId;
 const grid = $('grid');
+const toastNode = $('toast');
 const engine = new DrumEngine();
 const rows = new Map();
 const touchedAt = new Map();
@@ -336,11 +339,13 @@ grid.addEventListener('pointerdown', (e) => {
 
 grid.addEventListener('pointermove', (e) => {
   if (!paint) return;
-  const cell = document.elementFromPoint(e.clientX, e.clientY)?.closest('.cell');
+  const cell = grid.ownerDocument.elementFromPoint(e.clientX, e.clientY)?.closest('.cell');
   if (cell && grid.contains(cell)) paintCell(cell);
 });
 
-for (const type of ['pointerup', 'pointercancel']) addEventListener(type, () => (paint = null));
+eachWindow((view) => {
+  for (const type of ['pointerup', 'pointercancel']) view.addEventListener(type, () => (paint = null));
+});
 grid.addEventListener('contextmenu', (e) => e.preventDefault());
 
 function paintCell(cell) {
@@ -480,8 +485,8 @@ $('add-track').addEventListener('change', (e) => {
 $('note-close').addEventListener('click', () => act('setNote', { body: '' }));
 for (const button of document.querySelectorAll('[data-show]')) button.addEventListener('click', () => windows.show(button.dataset.show));
 
-addEventListener('pointerdown', unlockAudio, true);
-addEventListener('keydown', (e) => {
+// Shortcuts work in every window, popped-out ones too.
+function onKey(e) {
   unlockAudio();
   const typing = e.target.matches('input[type="number"], input[type="text"], textarea');
   const mod = e.ctrlKey || e.metaKey;
@@ -495,6 +500,10 @@ addEventListener('keydown', (e) => {
     e.preventDefault();
     act('redo');
   }
+}
+eachWindow((view) => {
+  view.addEventListener('pointerdown', unlockAudio, true);
+  view.addEventListener('keydown', onKey);
 });
 
 // --- patterns ----------------------------------------------------------------
@@ -589,8 +598,11 @@ function renderClaudeStatus() {
   pill.textContent = seen ? `active ${ago(seen)}` : 'not connected yet';
 }
 
+// Shown in the window the user is in.
 function toast(message, kind = 'error') {
-  const node = $('toast');
+  const node = toastNode;
+  const { body } = focusedView().document;
+  if (node.parentNode !== body) body.append(node);
   node.textContent = message;
   node.className = `toast show ${kind}`;
   clearTimeout(toast.timer);
@@ -606,12 +618,14 @@ for (const inst of INSTRUMENTS) $('add-track').append(new Option(inst.name, inst
 const mcpOrigin = location.hostname === 'localhost' ? `${location.protocol}//127.0.0.1:${location.port}` : location.origin;
 $('mcp-cmd').textContent = `claude mcp add --scope user --transport http daw-better ${mcpOrigin}/mcp`;
 $('copy-cmd').addEventListener('click', async () => {
+  const command = $('mcp-cmd');
+  const view = command.ownerDocument.defaultView; // the Claude window may be popped out
   try {
-    await navigator.clipboard.writeText($('mcp-cmd').textContent);
+    await view.navigator.clipboard.writeText(command.textContent);
     $('copy-cmd').textContent = 'Copied';
     setTimeout(() => ($('copy-cmd').textContent = 'Copy'), 1500);
   } catch {
-    getSelection().selectAllChildren($('mcp-cmd'));
+    view.getSelection().selectAllChildren(command);
   }
 });
 
@@ -628,7 +642,7 @@ const windows = initWindows($('workspace'), {
   playlist: (workspace, win) => ({ x: 260, y: Math.max(16, workspace.clientHeight - win.offsetHeight - 16) }),
   mixer: (workspace, win) => ({ x: 260, y: Math.max(16, workspace.clientHeight - win.offsetHeight - 16) }),
   claude: (workspace, win) => ({ x: workspace.clientWidth - win.offsetWidth - 16, y: 16 }),
-});
+}, { toast });
 
 setInterval(() => {
   renderActivity();

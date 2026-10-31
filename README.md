@@ -56,6 +56,8 @@ Things to try:
 - **Grid** sets the subdivision: 16ths, 8ths, triplets, and so on. The counting row above the steps follows it ("1 e + a").
 - **Swing** runs from 50% (straight) to 75%. 66% is a triplet shuffle.
 - The sequencer, Piano Roll, Playlist, Mixer, Browser and Claude panels are windows. Drag them by the title bar, and double-click a title bar to collapse it. The four buttons after **Clear** in the toolbar bring the sequencer, Piano Roll, Playlist or Mixer to the front. Resize the Piano Roll, the Playlist and the Mixer from the bottom-right corner. This browser remembers where you put them. On narrow screens they stack.
+- **↗** in a title bar pops that window out into a browser window of its own. Drag it to a second screen and make it as big as you like. **↙**, or closing that window, puts it back. Everything keeps working in a popped-out window: the meters, the playhead and the keyboard shortcuts. Reloading the page doesn't close popped-out windows, and closing the page closes them.
+- The next time you pop a window out, it opens where you left it. On a second screen, Chrome and Edge first ask to let the page "manage windows on all your displays". Without that, the window opens on the main page's screen.
 
 ## Piano roll
 
@@ -178,7 +180,7 @@ Notes are given as a pitch name (`"C4"` is middle C, `"F#2"`, `"Bb3"`), a start 
 - [public/audio.js](public/audio.js) synthesizes every drum and synth sound, so there are no samples to load. A look-ahead scheduler plays the current pattern or the whole arrangement, keeps timing tight through tempo changes, and keeps playing in a background tab. Each track plays into its mixer channel.
 - [public/effects.js](public/effects.js) builds the mixer on the Web Audio API: per channel, the effects in order, then pan, fader and meter, all into the master channel.
 - [public/app.js](public/app.js) renders whatever state the server sends. Claude's edits briefly flash in the grid.
-- [public/windows.js](public/windows.js) and [public/knob.js](public/knob.js) provide the draggable windows and rotary knobs.
+- [public/windows.js](public/windows.js) and [public/knob.js](public/knob.js) provide the draggable windows and rotary knobs. A popped-out window opens [public/popout.html](public/popout.html), and the main page moves the panel into it and keeps running it. So there is still one audio engine and one connection to the server. [public/views.js](public/views.js) lets the rest of the code work in every window: it looks elements up by id, adds listeners, and provides animation frames that keep coming while any window is on screen.
 
 ## Self-hosting on your network
 

@@ -5,8 +5,8 @@
 
 import { EFFECTS, MAX_EFFECTS, VOLUME_RANGE, defaultChannel, effectType, formatParam, mixerChannels, toPosition, fromPosition } from '/shared/mixer.js';
 import { createKnob } from './knob.js';
+import { byId as $, requestFrame } from './views.js';
 
-const $ = (id) => document.getElementById(id);
 const MASTER = 'master';
 const MASTER_COLOR = '#e4e7ee';
 const SLOTS = 2; // effect names a strip has room for
@@ -467,7 +467,7 @@ export function createMixer({ engine, act, getState }) {
 
   let last = performance.now();
   function meter(now) {
-    requestAnimationFrame(meter);
+    requestFrame(meter);
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (win.classList.contains('collapsed')) return;
@@ -483,7 +483,7 @@ export function createMixer({ engine, act, getState }) {
       c.gr.querySelector('output').value = text;
     }
   }
-  requestAnimationFrame(meter);
+  requestFrame(meter);
 
   return { render, select };
 }

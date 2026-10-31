@@ -6,6 +6,7 @@
 
 import { BEATS_PER_BAR } from '/shared/patterns.js';
 import { Mixer } from './effects.js';
+import { requestFrame, cancelFrame } from './views.js';
 
 const LOOKAHEAD = 0.12;
 const TICK_MS = 25;
@@ -116,7 +117,7 @@ export class DrumEngine {
     this.shown = -1;
     this.schedule();
     this.ticker.start();
-    this.raf = requestAnimationFrame(this.draw);
+    this.raf = requestFrame(this.draw);
   }
 
   /** Apply the mixer's settings: levels, panning, mute and solo, and the effects. */
@@ -131,7 +132,7 @@ export class DrumEngine {
 
   stop() {
     this.ticker.stop();
-    cancelAnimationFrame(this.raf);
+    cancelFrame(this.raf);
     this.running = false;
     this.queue = [];
     this.onTick?.(-1);
@@ -203,7 +204,7 @@ export class DrumEngine {
       this.shown = tick;
       this.onTick?.(tick);
     }
-    if (this.running) this.raf = requestAnimationFrame(this.draw);
+    if (this.running) this.raf = requestFrame(this.draw);
   };
 
   // A drum hit, played into the mixer channel `channel` (a track id). Voices connect to

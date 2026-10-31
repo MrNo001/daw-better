@@ -5,6 +5,7 @@
 
 import { SYNTHS, PITCH_RANGE, noteName } from '/shared/synths.js';
 import { createKnob } from './knob.js';
+import { byId as $ } from './views.js';
 
 const ROW = 14; // px per pitch
 const COL = 24; // px per step
@@ -42,7 +43,6 @@ function laneBackground(stepsPerBeat) {
 }
 
 export function createPianoRoll({ engine, act, getState, onSelect }) {
-  const $ = (id) => document.getElementById(id);
   const scroll = $('roll-scroll');
   const lanes = $('roll-lanes');
   const ruler = $('roll-ruler');
@@ -303,7 +303,7 @@ export function createPianoRoll({ engine, act, getState, onSelect }) {
   lanes.addEventListener('pointermove', (e) => {
     if (!gesture) return;
     if (gesture.kind === 'erase') {
-      const note = noteUnder(document.elementFromPoint(e.clientX, e.clientY));
+      const note = noteUnder(lanes.ownerDocument.elementFromPoint(e.clientX, e.clientY));
       if (note) erase(note);
       return;
     }

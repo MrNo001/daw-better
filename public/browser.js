@@ -5,6 +5,7 @@
 
 import { INSTRUMENTS } from '/shared/instruments.js';
 import { SYNTHS } from '/shared/synths.js';
+import { byId as $, eachWindow } from './views.js';
 
 export const LOOP_TYPE = 'application/x-daw-better-loop';
 const OPEN_FOLDERS_KEY = 'daw-better.browser.open';
@@ -38,7 +39,6 @@ function noteSteps(synth, length) {
 }
 
 export function createBrowser({ act, getState, toast, sequencerWindow }) {
-  const $ = (id) => document.getElementById(id);
   const tree = $('library');
   const form = $('save-form');
   const nameInput = $('save-name');
@@ -120,7 +120,8 @@ export function createBrowser({ act, getState, toast, sequencerWindow }) {
   }
 
   function render() {
-    const focused = tree.contains(document.activeElement) ? document.activeElement.closest('.loop-row')?.dataset.id : null;
+    const { activeElement } = tree.ownerDocument;
+    const focused = tree.contains(activeElement) ? activeElement.closest('.loop-row')?.dataset.id : null;
     // The new-folder field stays put, so a reload while typing a name doesn't interrupt it.
     for (const child of [...tree.children]) if (child !== newFolderRow) child.remove();
     if (library.length) tree.append(...library.map(folderItem));
@@ -355,13 +356,16 @@ export function createBrowser({ act, getState, toast, sequencerWindow }) {
     e.preventDefault();
     loadLoop(id);
   });
-  addEventListener('dragend', () => {
-    dragging = null;
-    markTarget(null);
-    openOnHover(null);
-    for (const node of tree.querySelectorAll('.drag-source')) node.classList.remove('drag-source');
-    sequencerWindow.classList.remove('drop-target');
-  });
+  // A drag ends in the window it started in, which may be another popped-out window.
+  eachWindow((view) =>
+    view.addEventListener('dragend', () => {
+      dragging = null;
+      markTarget(null);
+      openOnHover(null);
+      for (const node of tree.querySelectorAll('.drag-source')) node.classList.remove('drag-source');
+      sequencerWindow.classList.remove('drop-target');
+    }),
+  );
 
   // --- saving the pattern ------------------------------------------------------
 

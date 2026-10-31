@@ -1097,6 +1097,9 @@ input.lcd-value::-webkit-inner-spin-button, input.lcd-value::-webkit-outer-spin-
   .window.resizable { resize: none; min-width: 0; }
   .tree { max-height: 320px; }
   .titlebar { cursor: default; }
+  /* No popping out on a phone, where a new window is just another tab. */
+  .titlebar [data-popout] { display: none; }
+  .titlebar [data-popout]:first-of-type + .win-btn { margin-left: auto; }
 }
 
 @media (max-width: 640px) {
@@ -1114,3 +1117,27 @@ input.lcd-value::-webkit-inner-spin-button, input.lcd-value::-webkit-outer-spin-
   .fx-panel { flex: 1; width: auto; border-left: 0; border-top: 1px solid var(--window-edge); }
   .mixer-window:not(.collapsed) { height: 640px; }
 }
+
+/* --- popped-out windows (windows.js) ---------------------------------------- */
+
+/* The panel fills its browser window, whatever the window's size. These come last so they
+   beat the narrow-screen rules above, which a small window also triggers. */
+body.popout { height: 100%; overflow: hidden; }
+body.popout > .window {
+  position: static;
+  flex: 1;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  resize: none;
+}
+body.popout > .window .titlebar { cursor: default; filter: none; }
+body.popout [data-collapse] { display: none; }
+body.popout .titlebar [data-popout] { display: block; }
+body.popout .tree { max-height: none; }
+.popout-note { margin: auto; padding: 24px; max-width: 360px; color: var(--muted); text-align: center; }

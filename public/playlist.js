@@ -8,6 +8,7 @@
 import { BEATS_PER_BAR, PATTERN_COLORS, patternBeats, barLabel, lengthLabel } from '/shared/patterns.js';
 import { TICKS } from './audio.js';
 import { LOOP_TYPE } from './browser.js';
+import { byId as $, eachWindow } from './views.js';
 
 const BEAT = 14; // px per beat
 const LANE = 32; // px per lane
@@ -68,7 +69,6 @@ function patternPicture(pattern) {
 }
 
 export function createPlaylist({ act, getState, toast }) {
-  const $ = (id) => document.getElementById(id);
   const list = $('pattern-list');
   const scroll = $('arrange-scroll');
   const ruler = $('arrange-ruler');
@@ -108,7 +108,8 @@ export function createPlaylist({ act, getState, toast }) {
 
   function renderPatterns(state) {
     if (renaming) return; // don't take the name field away while it's being typed in
-    const focused = list.contains(document.activeElement) ? document.activeElement.closest('.pattern-item')?.dataset.id : null;
+    const { activeElement } = list.ownerDocument;
+    const focused = list.contains(activeElement) ? activeElement.closest('.pattern-item')?.dataset.id : null;
     list.replaceChildren(
       ...state.patterns.map((pattern) => {
         const current = pattern.id === state.current;
@@ -339,7 +340,7 @@ export function createPlaylist({ act, getState, toast }) {
   lanes.addEventListener('pointermove', (e) => {
     if (!gesture) return;
     if (gesture.kind === 'erase') {
-      const clip = clipUnder(document.elementFromPoint(e.clientX, e.clientY));
+      const clip = clipUnder(lanes.ownerDocument.elementFromPoint(e.clientX, e.clientY));
       if (clip) erase(clip);
       return;
     }
@@ -407,10 +408,13 @@ export function createPlaylist({ act, getState, toast }) {
     if (patternId) act('addClip', { id: newClipId(), pattern: patternId, ...spot });
     else act('loadLoop', { id: loopId, asNew: true, clip: spot });
   });
-  addEventListener('dragend', () => {
-    draggedPattern = null;
-    ghost.hidden = true;
-  });
+  // A drag ends in the window it started in, which may be another popped-out window.
+  eachWindow((view) =>
+    view.addEventListener('dragend', () => {
+      draggedPattern = null;
+      ghost.hidden = true;
+    }),
+  );
 
   return { render, setPlayhead };
 }
